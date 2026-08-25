@@ -14,6 +14,19 @@ export const LANDMARK = {
   RIGHT_SHOULDER: 12,
   LEFT_HIP: 23,
   RIGHT_HIP: 24,
+  LEFT_KNEE: 25,
+  RIGHT_KNEE: 26,
+} as const;
+
+// Correction multipliers inherited from the reference project
+// (JavTahir/Live-Measurements-Api). They were tuned there against a
+// height-guess calibration, so they remain unverified against a real tape
+// measure under this project's card-based calibration. Treat as provisional.
+export const CORRECTION = {
+  SHOULDER: 1.1,
+  CHEST: 1.15,
+  WAIST: 1.16,
+  HIP: 1.35,
 } as const;
 
 export const VISIBILITY_THRESHOLD = 0.5;

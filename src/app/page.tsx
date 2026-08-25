@@ -4,8 +4,33 @@ import { useState } from "react";
 import CaptureStep from "@/components/CaptureStep";
 import CalibrateStep from "@/components/CalibrateStep";
 import ResultsStep from "@/components/ResultsStep";
-import { MeasurementApiError, requestMeasurements } from "@/lib/api";
+import { computeMeasurements } from "@/lib/measure";
 import type { CapturedPhoto, Measurements, Step } from "@/lib/types";
+
+/** Decodes the captured photo back to raw pixels for the contour scan. */
+function loadImageData(
+  dataUrl: string,
+  width: number,
+  height: number,
+): Promise<ImageData> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) {
+        reject(new Error("Could not read the captured photo."));
+        return;
+      }
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(ctx.getImageData(0, 0, width, height));
+    };
+    img.onerror = () => reject(new Error("Could not read the captured photo."));
+    img.src = dataUrl;
+  });
+}
 
 export default function Home() {
   const [step, setStep] = useState<Step>("intro");
@@ -26,12 +51,12 @@ export default function Home() {
     setSubmitting(true);
     setError(null);
     try {
-      const m = await requestMeasurements(photo.dataUrl, cardBoxWidthPx);
-      setMeasurements(m);
+      const image = await loadImageData(photo.dataUrl, photo.width, photo.height);
+      setMeasurements(computeMeasurements(photo.landmarks, image, cardBoxWidthPx));
       setStep("results");
     } catch (err) {
       setError(
-        err instanceof MeasurementApiError
+        err instanceof Error
           ? err.message
           : "Something went wrong getting your measurements. Please try again.",
       );

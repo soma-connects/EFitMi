@@ -17,45 +17,52 @@ working end to end.
 2. **Calibrate** — after capture, drag/resize a box over the card in the
    photo. Its pixel width, plus the card's known 8.56cm width, gives
    `scale_factor = 8.56 / card_box_width_px`.
-3. **Measure** — the photo and `card_box_width_px` are sent to a small
-   Flask service (`service/`), which re-runs pose detection server-side,
-   estimates a relative depth map (MiDaS) to inform an elliptical
-   circumference estimate, and returns shoulder/chest/waist/hip
-   measurements in centimeters.
+3. **Measure** — `src/lib/measure.ts` converts the landmark pixel
+   distances to centimeters using that scale, refines the widths with a
+   contour scan of the photo, and derives chest/waist/hip circumferences
+   from an elliptical approximation. Runs entirely in the browser.
 4. **Results** — the photo with landmarks overlaid (for debugging/trust)
    plus the measurement list.
 
 ## Running it locally
 
-Two processes: the Next.js frontend, and the Python measurement service.
-
-### Frontend
+One process — the app is fully client-side, with no backend to run.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Opens on http://localhost:3000.
+Opens on http://localhost:3000. `npm install` also fetches the MediaPipe
+WASM runtime and pose model into `public/mediapipe/` (gitignored); run
+`npm run setup:mediapipe` directly if you ever need to refresh them.
 
-### Measurement service
+### The Python service (`service/`) — currently unused
+
+The measurement pipeline originally ran as a Flask service, and that code
+is still in the repo. It is **not** part of the running app: `measure.ts`
+is a direct port of it, verified to produce identical output to the
+0.01cm on the same landmarks and photo.
+
+It's kept because it holds the one capability the browser port doesn't —
+MiDaS depth estimation, which refines the circumference estimates. In
+practice that was already dormant (every response returned
+`depth_refinement: false`, since the weights need a `torch.hub` download),
+which is what made the port lossless. If you revive it, keep the geometry
+in the two implementations in sync.
 
 ```bash
 cd service
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-python app.py
+python app.py          # http://localhost:8001
+python test_calibration.py   # calibration checks, no heavy deps needed
 ```
-
-Runs on http://localhost:8001. First startup downloads MiDaS_small weights
-via `torch.hub` — needs outbound network access once.
-
-The frontend expects the service at `NEXT_PUBLIC_MEASUREMENT_API_URL`
-(defaults to `http://localhost:8001` — see `.env.local.example`).
 
 ## Credit
 
-The measurement service (`service/app.py`) is adapted from
+The measurement pipeline (`src/lib/measure.ts`, ported from
+`service/app.py`) is adapted from
 [JavTahir/Live-Measurements-Api](https://github.com/JavTahir/Live-Measurements-Api)
 (MIT License) — MediaPipe pose extraction, contour-assisted width
 detection, and the MiDaS-based circumference estimate are carried over
