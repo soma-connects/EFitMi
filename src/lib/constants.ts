@@ -22,6 +22,12 @@ export const LANDMARK = {
 // (JavTahir/Live-Measurements-Api). They were tuned there against a
 // height-guess calibration, so they remain unverified against a real tape
 // measure under this project's card-based calibration. Treat as provisional.
+// Rough adult shoulder width, used only to seed the card box near a sensible
+// starting size on the calibrate screen. It never enters a measurement — the
+// user's own confirmed box does — so an imprecise value here costs nothing
+// but a slightly worse starting guess.
+export const TYPICAL_SHOULDER_CM = 40;
+
 export const CORRECTION = {
   SHOULDER: 1.1,
   CHEST: 1.15,

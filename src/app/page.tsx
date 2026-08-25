@@ -4,6 +4,8 @@ import { useState } from "react";
 import CaptureStep from "@/components/CaptureStep";
 import CalibrateStep from "@/components/CalibrateStep";
 import ResultsStep from "@/components/ResultsStep";
+import IntroStep from "@/components/IntroStep";
+import StepIndicator from "@/components/StepIndicator";
 import { computeMeasurements } from "@/lib/measure";
 import type { CapturedPhoto, Measurements, Step } from "@/lib/types";
 
@@ -38,6 +40,7 @@ export default function Home() {
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cardAdjusted, setCardAdjusted] = useState(true);
 
   function reset() {
     setPhoto(null);
@@ -46,10 +49,11 @@ export default function Home() {
     setStep("intro");
   }
 
-  async function handleConfirmCard(cardBoxWidthPx: number) {
+  async function handleConfirmCard(cardBoxWidthPx: number, adjusted: boolean) {
     if (!photo) return;
     setSubmitting(true);
     setError(null);
+    setCardAdjusted(adjusted);
     try {
       const image = await loadImageData(photo.dataUrl, photo.width, photo.height);
       setMeasurements(computeMeasurements(photo.landmarks, image, cardBoxWidthPx));
@@ -66,7 +70,7 @@ export default function Home() {
   }
 
   return (
-    <main className="flex-1 flex flex-col items-center justify-center px-4 py-8 gap-6">
+    <main className="flex-1 flex flex-col items-center px-4 py-8 gap-6">
       <header className="text-center">
         <h1 className="text-2xl font-bold tracking-tight">EFitMi</h1>
         <p className="text-sm text-neutral-500">
@@ -74,21 +78,9 @@ export default function Home() {
         </p>
       </header>
 
-      {step === "intro" && (
-        <div className="flex flex-col items-center gap-4 max-w-md text-center">
-          <p className="text-neutral-600 dark:text-neutral-300">
-            Stand facing your camera and hold a bank card (ATM/debit card)
-            flat against your chest. We use the card&apos;s known size to
-            calibrate real-world measurements from the photo.
-          </p>
-          <button
-            onClick={() => setStep("capture")}
-            className="px-6 py-3 rounded-xl font-semibold text-white bg-neutral-900 dark:bg-white dark:text-neutral-900"
-          >
-            Start
-          </button>
-        </div>
-      )}
+      <StepIndicator current={step} />
+
+      {step === "intro" && <IntroStep onStart={() => setStep("capture")} />}
 
       {step === "capture" && (
         <CaptureStep
@@ -114,7 +106,13 @@ export default function Home() {
       )}
 
       {step === "results" && photo && measurements && (
-        <ResultsStep photo={photo} measurements={measurements} onStartOver={reset} />
+        <ResultsStep
+          photo={photo}
+          measurements={measurements}
+          cardAdjusted={cardAdjusted}
+          onStartOver={reset}
+          onAdjustCard={() => setStep("calibrate")}
+        />
       )}
     </main>
   );

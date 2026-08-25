@@ -1,9 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import DraggableRect from "./DraggableRect";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import DraggableRect, { type ActivePoint } from "./DraggableRect";
 import type { CapturedPhoto, PixelRect } from "@/lib/types";
-import { CARD_ASPECT } from "@/lib/constants";
+import {
+  CARD_ASPECT,
+  CARD_WIDTH_MM,
+  CORRECTION,
+  LANDMARK,
+  TYPICAL_SHOULDER_CM,
+} from "@/lib/constants";
+
+const CARD_WIDTH_CM = CARD_WIDTH_MM / 10;
+
+/** How wide the card box should appear on screen when the view opens. */
+const TARGET_ON_SCREEN_PX = 170;
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 12;
+const LOUPE_SIZE = 104;
+const LOUPE_ZOOM = 2.5;
+
+interface View {
+  zoom: number;
+  /** Photo-space point held at the centre of the viewport. */
+  cx: number;
+  cy: number;
+}
 
 export default function CalibrateStep({
   photo,
@@ -13,14 +35,17 @@ export default function CalibrateStep({
   error,
 }: {
   photo: CapturedPhoto;
-  onConfirm: (cardBoxWidthPxNatural: number) => void;
+  onConfirm: (cardBoxWidthPxNatural: number, adjusted: boolean) => void;
   onRetake: () => void;
   submitting: boolean;
   error: string | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [displaySize, setDisplaySize] = useState({ width: 0, height: 0 });
+  const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [rect, setRect] = useState<PixelRect | null>(null);
+  const [userView, setUserView] = useState<View | null>(null);
+  const [activePoint, setActivePoint] = useState<ActivePoint | null>(null);
+  const [lockAspect, setLockAspect] = useState(true);
 
   const naturalAspect = photo.width / photo.height;
 
@@ -29,58 +54,247 @@ export default function CalibrateStep({
     if (!el) return;
     const observer = new ResizeObserver((entries) => {
       const { width, height } = entries[0].contentRect;
-      setDisplaySize({ width, height });
+      setViewport({ width, height });
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
 
-  // Seed a plausible default box near chest height, roughly card-shaped,
-  // sized off a fraction of the photo width — user drags it onto the
-  // actual card from here. Derived at render time (not an effect) so it
-  // never fights the user's own drag/resize state once that exists.
-  function defaultRect(size: { width: number; height: number }): PixelRect {
-    const width = size.width * 0.28;
+  // Seed the box from the body rather than a blind fraction of the frame: an
+  // adult's shoulders span roughly TYPICAL_SHOULDER_CM, so the detected
+  // shoulder width implies about how many pixels a card covers at that
+  // distance. This is only a starting position — it is never treated as a
+  // measurement (see `adjusted` below).
+  const seedRect = useMemo<PixelRect>(() => {
+    const ls = photo.landmarks[LANDMARK.LEFT_SHOULDER];
+    const rs = photo.landmarks[LANDMARK.RIGHT_SHOULDER];
+    const lh = photo.landmarks[LANDMARK.LEFT_HIP];
+    const rh = photo.landmarks[LANDMARK.RIGHT_HIP];
+
+    const shoulderSpan = Math.abs(ls.x - rs.x) * photo.width;
+    const seeded =
+      shoulderSpan > 0
+        ? shoulderSpan * (CARD_WIDTH_CM / TYPICAL_SHOULDER_CM) * CORRECTION.SHOULDER
+        : photo.width * 0.1;
+
+    const width = Math.min(Math.max(seeded, 12), photo.width * 0.6);
     const height = width / CARD_ASPECT;
+
+    const centerX = ((ls.x + rs.x) / 2) * photo.width;
+    const shoulderY = ((ls.y + rs.y) / 2) * photo.height;
+    const hipY = ((lh.y + rh.y) / 2) * photo.height;
+    const centerY = shoulderY + (hipY - shoulderY) * 0.3;
+
     return {
-      x: size.width / 2 - width / 2,
-      y: size.height * 0.5 - height / 2,
+      x: centerX - width / 2,
+      y: centerY - height / 2,
       width,
       height,
     };
+  }, [photo]);
+
+  /** Natural photo pixels per viewport pixel at zoom 1. */
+  const baseScale = viewport.width > 0 ? viewport.width / photo.width : 0;
+
+  // Open already zoomed on the card. A card is only ~20px wide next to a
+  // whole body, and no one can place a 20px box accurately on a phone — so
+  // the view starts where the work actually happens. Derived at render
+  // rather than in an effect, so it never fights the user's own zoom/pan.
+  const defaultView = useMemo<View | null>(() => {
+    if (viewport.width === 0 || baseScale === 0) return null;
+    return {
+      zoom: Math.min(
+        MAX_ZOOM,
+        Math.max(MIN_ZOOM, TARGET_ON_SCREEN_PX / (seedRect.width * baseScale)),
+      ),
+      cx: seedRect.x + seedRect.width / 2,
+      cy: seedRect.y + seedRect.height / 2,
+    };
+  }, [viewport.width, baseScale, seedRect]);
+
+  const view = userView ?? defaultView;
+  const scale = view ? baseScale * view.zoom : baseScale;
+
+  const rectNatural = rect ?? seedRect;
+
+  const toScreen = useCallback(
+    (r: PixelRect): PixelRect => ({
+      x: (r.x - (view?.cx ?? 0)) * scale + viewport.width / 2,
+      y: (r.y - (view?.cy ?? 0)) * scale + viewport.height / 2,
+      width: r.width * scale,
+      height: r.height * scale,
+    }),
+    [view, scale, viewport],
+  );
+
+  const toNatural = useCallback(
+    (r: PixelRect): PixelRect => ({
+      x: (r.x - viewport.width / 2) / scale + (view?.cx ?? 0),
+      y: (r.y - viewport.height / 2) / scale + (view?.cy ?? 0),
+      width: r.width / scale,
+      height: r.height / scale,
+    }),
+    [view, scale, viewport],
+  );
+
+  const screenRect = view ? toScreen(rectNatural) : null;
+
+  const cardWidthNatural = rectNatural.width;
+  const lowResolution = cardWidthNatural > 0 && cardWidthNatural < 40;
+  const adjusted = rect !== null;
+
+  function nudgeZoom(factor: number) {
+    setUserView((v) => {
+      const base = v ?? defaultView;
+      if (!base) return v;
+      return {
+        ...base,
+        zoom: Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, base.zoom * factor)),
+      };
+    });
   }
 
-  const displayRect = rect ?? (displaySize.width > 0 ? defaultRect(displaySize) : null);
+  /** Recentre the view on the box, for when panning has lost it. */
+  function centerOnBox() {
+    setUserView((v) => {
+      const base = v ?? defaultView;
+      if (!base) return v;
+      return {
+        ...base,
+        cx: rectNatural.x + rectNatural.width / 2,
+        cy: rectNatural.y + rectNatural.height / 2,
+      };
+    });
+  }
 
   function handleConfirm() {
-    if (!displayRect || displaySize.width === 0) return;
-    const scale = photo.width / displaySize.width;
-    onConfirm(displayRect.width * scale);
+    onConfirm(cardWidthNatural, adjusted);
   }
 
   return (
     <div className="flex flex-col items-center gap-4 w-full max-w-md mx-auto">
-      <p className="text-sm text-center text-neutral-500">
-        Drag and resize the yellow box so it exactly outlines the card in the
-        photo.
-      </p>
+      <div className="text-center">
+        <h2 className="font-semibold">Outline the card</h2>
+        <p className="text-sm text-neutral-500">
+          Drag the corners onto the card&apos;s edges. This sets the scale for
+          every measurement, so it&apos;s worth getting exact.
+        </p>
+      </div>
 
       <div
         ref={containerRef}
-        className="relative w-full rounded-2xl overflow-hidden shadow-lg bg-black"
+        className="relative w-full rounded-2xl overflow-hidden shadow-lg bg-black select-none touch-none"
         style={{ aspectRatio: `${naturalAspect}` }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={photo.dataUrl}
-          alt="Captured photo"
-          className="absolute inset-0 w-full h-full object-contain select-none pointer-events-none"
-          draggable={false}
-        />
-        {displayRect && displaySize.width > 0 && (
-          <DraggableRect rect={displayRect} bounds={displaySize} onChange={setRect} />
+        {view && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={photo.dataUrl}
+            alt="Captured photo"
+            className="absolute left-0 top-0 max-w-none select-none pointer-events-none origin-top-left"
+            draggable={false}
+            style={{
+              width: photo.width * scale,
+              height: photo.height * scale,
+              transform: `translate(${viewport.width / 2 - view.cx * scale}px, ${viewport.height / 2 - view.cy * scale}px)`,
+            }}
+          />
         )}
+
+        {screenRect && viewport.width > 0 && (
+          <DraggableRect
+            rect={screenRect}
+            bounds={viewport}
+            aspectRatio={lockAspect ? CARD_ASPECT : undefined}
+            onChange={(r) => setRect(toNatural(r))}
+            onActivePointChange={setActivePoint}
+            onPan={(dx, dy) =>
+              setUserView((v) => {
+                const base = v ?? defaultView;
+                if (!base) return v;
+                return { ...base, cx: base.cx - dx / scale, cy: base.cy - dy / scale };
+              })
+            }
+          />
+        )}
+
+        {activePoint && view && (
+          <div
+            className="absolute pointer-events-none rounded-full border-2 border-white/80 shadow-lg overflow-hidden bg-black"
+            style={{
+              width: LOUPE_SIZE,
+              height: LOUPE_SIZE,
+              top: 10,
+              left: activePoint.x > viewport.width / 2 ? 10 : undefined,
+              right: activePoint.x > viewport.width / 2 ? undefined : 10,
+              backgroundImage: `url(${photo.dataUrl})`,
+              backgroundRepeat: "no-repeat",
+              backgroundSize: `${photo.width * scale * LOUPE_ZOOM}px ${photo.height * scale * LOUPE_ZOOM}px`,
+              backgroundPosition: `${LOUPE_SIZE / 2 - (activePoint.x + (view.cx * scale - viewport.width / 2)) * LOUPE_ZOOM}px ${LOUPE_SIZE / 2 - (activePoint.y + (view.cy * scale - viewport.height / 2)) * LOUPE_ZOOM}px`,
+            }}
+          >
+            <div className="absolute left-1/2 top-0 bottom-0 w-px bg-yellow-400/80" />
+            <div className="absolute top-1/2 left-0 right-0 h-px bg-yellow-400/80" />
+          </div>
+        )}
+
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1 rounded-full bg-black/65 backdrop-blur px-1 py-1">
+          <button
+            onClick={() => nudgeZoom(1 / 1.4)}
+            aria-label="Zoom out"
+            className="w-9 h-9 rounded-full text-white text-lg leading-none"
+          >
+            −
+          </button>
+          <button
+            onClick={centerOnBox}
+            className="px-3 h-9 rounded-full text-white text-xs font-medium"
+          >
+            Centre
+          </button>
+          <button
+            onClick={() => nudgeZoom(1.4)}
+            aria-label="Zoom in"
+            className="w-9 h-9 rounded-full text-white text-lg leading-none"
+          >
+            +
+          </button>
+        </div>
       </div>
+
+      <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-300 self-start">
+        <input
+          type="checkbox"
+          checked={lockAspect}
+          onChange={(e) => setLockAspect(e.target.checked)}
+          className="w-4 h-4 accent-yellow-500"
+        />
+        Lock to card shape
+      </label>
+      <p className="text-xs text-neutral-500 -mt-3 self-start">
+        {lockAspect
+          ? "The box keeps a bank card's exact proportions, so you only have to match the width. If the card won't fit it, the card was tilted — retake for a better result."
+          : "Free resize. Only unlock if the card looks skewed in the photo; a skewed card gives a less accurate scale."}
+      </p>
+
+      {!adjusted && (
+        <div className="w-full rounded-xl border border-blue-400/60 bg-blue-50 dark:bg-blue-950/40 p-3">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <span className="font-semibold">This box is only a guess.</span>{" "}
+            It&apos;s sized from an average build, not from your card. Drag it
+            onto the card&apos;s real edges — until you do, the measurements
+            describe an average person rather than you.
+          </p>
+        </div>
+      )}
+
+      {lowResolution && (
+        <p className="text-sm text-amber-500 text-center">
+          The card is only ~{Math.round(cardWidthNatural)}px wide in the photo,
+          so small placement errors will move the numbers a lot. Retaking from
+          closer will help.
+        </p>
+      )}
 
       {error && <p className="text-sm text-red-500 text-center">{error}</p>}
 
@@ -97,7 +311,7 @@ export default function CalibrateStep({
           disabled={submitting}
           className="flex-1 py-3 rounded-xl font-semibold text-white bg-neutral-900 dark:bg-white dark:text-neutral-900 disabled:opacity-50"
         >
-          {submitting ? "Measuring…" : "Confirm card position"}
+          {submitting ? "Measuring…" : "Confirm"}
         </button>
       </div>
     </div>
