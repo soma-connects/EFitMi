@@ -1,0 +1,20 @@
+# Written from the actual imports in app.py — the reference project's own
+# requirements.txt had a corrupted encoding and wasn't usable.
+
+flask>=3.1
+flask-cors>=5.0
+
+# Pinned: mediapipe 1.x removed the legacy `mp.solutions` API this service
+# uses. Do not bump to 1.x without porting to the tasks API first.
+mediapipe==0.10.20
+
+# Pinned: mediapipe 0.10.x requires numpy 1.x.
+numpy==1.26.4
+
+opencv-python-headless>=4.11
+
+# Optional — only powers the MiDaS depth refinement. The service starts and
+# measures without these, just without depth-adjusted circumferences.
+torch>=2.6
+torchvision>=0.21
+timm>=1.0
