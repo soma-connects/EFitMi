@@ -19,15 +19,21 @@ import torch.nn.functional as F
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
+from measurement_math import CARD_WIDTH_CM, refine_width, scale_factor
+
 app = Flask(__name__)
 CORS(app)
 
 mp_pose = mp.solutions.pose
 mp_holistic = mp.solutions.holistic
-holistic = mp_holistic.Holistic()
 
-# ISO/IEC 7810 ID-1 card width (bank/ATM/debit cards worldwide), in cm.
-CARD_WIDTH_CM = 8.56
+# static_image_mode=True is load-bearing, not a tuning knob. The default
+# (False) puts MediaPipe in video-tracking mode, where it seeds each call
+# from the previous call's result — so a shared detector carries state
+# across HTTP requests and returns different landmarks for the same photo
+# depending on what was measured before it. Each request here is an
+# independent still image, so it must be processed as one.
+holistic = mp_holistic.Holistic(static_image_mode=True)
 
 
 def load_depth_model():
@@ -59,44 +65,73 @@ def estimate_depth(image):
     return depth_map.squeeze().numpy()
 
 
+ROW_SAMPLE_COUNT = 9  # odd, so the median is an actual sampled row
+ROW_SAMPLE_SPREAD = 0.02  # fraction of image height to spread samples over
+
+
+def _scan_row_width(thresh, row, center_px):
+    """Width of the body at one scanned row, or None if an edge is missing.
+
+    Returns None rather than a substitute value: a scan that never found an
+    edge has measured nothing, and inventing a number here is how a failed
+    scan used to end up presented as a measurement.
+    """
+    line = thresh[row, :]
+    left_edge = right_edge = None
+
+    for i in range(center_px, 0, -1):
+        if line[i] == 0:
+            left_edge = i
+            break
+    for i in range(center_px, len(line)):
+        if line[i] == 0:
+            right_edge = i
+            break
+
+    if left_edge is None or right_edge is None:
+        return None
+    return right_edge - left_edge
+
+
 def get_body_width_at_height(frame, height_px, center_x):
-    """Scan horizontally at a specific height to find body edges."""
+    """Body width in pixels at a given height, or None if it can't be found.
+
+    A single scanline is far too sensitive to exactly which row it lands on
+    — a few pixels of drift can cross a shadow or a fold and swing the
+    result wildly. Sampling a band of rows and taking the median makes the
+    reading stable enough to be worth using.
+    """
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     blur = cv2.GaussianBlur(gray, (5, 5), 0)
     _, thresh = cv2.threshold(blur, 50, 255, cv2.THRESH_BINARY)
 
-    if height_px >= frame.shape[0]:
-        height_px = frame.shape[0] - 1
+    image_height, image_width = frame.shape[:2]
+    center_px = int(np.clip(center_x * image_width, 1, image_width - 2))
+    spread_px = max(1, int(image_height * ROW_SAMPLE_SPREAD))
 
-    horizontal_line = thresh[height_px, :]
-    center_x = int(center_x * frame.shape[1])
-    left_edge, right_edge = center_x, center_x
+    widths = []
+    for offset in np.linspace(-spread_px, spread_px, ROW_SAMPLE_COUNT):
+        row = int(np.clip(height_px + offset, 0, image_height - 1))
+        width = _scan_row_width(thresh, row, center_px)
+        if width is not None and width > 0:
+            widths.append(width)
 
-    for i in range(center_x, 0, -1):
-        if horizontal_line[i] == 0:
-            left_edge = i
-            break
-    for i in range(center_x, len(horizontal_line)):
-        if horizontal_line[i] == 0:
-            right_edge = i
-            break
-
-    width_px = right_edge - left_edge
-    min_width = 0.1 * frame.shape[1]
-    if width_px < min_width:
-        width_px = min_width
-    return width_px
+    if not widths:
+        return None
+    return float(np.median(widths))
 
 
-def calculate_measurements(results, scale_factor, image_width, image_height, depth_map, frame):
+
+
+def calculate_measurements(results, cm_per_px, image_width, image_height, depth_map, frame):
     landmarks = results.pose_landmarks.landmark
 
     def pixel_to_cm(value):
-        return round(value * scale_factor, 2)
+        return round(value * cm_per_px, 2)
 
     def calculate_circumference(width_px, depth_ratio=1.0):
         # Elliptical approximation: C ~= 2*pi*sqrt((a^2 + b^2) / 2)
-        width_cm = width_px * scale_factor
+        width_cm = width_px * cm_per_px
         estimated_depth_cm = width_cm * depth_ratio * 0.7
         half_width = width_cm / 2
         half_depth = estimated_depth_cm / 2
@@ -131,8 +166,7 @@ def calculate_measurements(results, scale_factor, image_width, image_height, dep
     chest_y_px = int(chest_y * image_height)
     center_x = (left_shoulder.x + right_shoulder.x) / 2
     detected_width = get_body_width_at_height(frame, chest_y_px, center_x)
-    if detected_width > 0:
-        chest_width_px = max(chest_width_px, detected_width)
+    chest_width_px = refine_width(chest_width_px, detected_width)
     chest_depth_ratio = depth_ratio_at(center_x, chest_y)
     measurements["chest_width"] = pixel_to_cm(chest_width_px)
     measurements["chest_circumference"] = calculate_circumference(chest_width_px, chest_depth_ratio)
@@ -143,10 +177,8 @@ def calculate_measurements(results, scale_factor, image_width, image_height, dep
     waist_y_px = int(waist_y * image_height)
     waist_center_x = (left_hip.x + right_hip.x) / 2
     detected_width = get_body_width_at_height(frame, waist_y_px, waist_center_x)
-    if detected_width > 0:
-        waist_width_px = detected_width
-    else:
-        waist_width_px = abs(right_hip.x - left_hip.x) * image_width * 0.9
+    waist_landmark_width_px = abs(right_hip.x - left_hip.x) * image_width * 0.9
+    waist_width_px = refine_width(waist_landmark_width_px, detected_width)
     waist_width_px *= 1.16
     waist_depth_ratio = depth_ratio_at(waist_center_x, waist_y)
     measurements["waist_width"] = pixel_to_cm(waist_width_px)
@@ -158,8 +190,7 @@ def calculate_measurements(results, scale_factor, image_width, image_height, dep
     hip_y = left_hip.y + (left_knee.y - left_hip.y) * 0.1
     hip_y_px = int(hip_y * image_height)
     detected_width = get_body_width_at_height(frame, hip_y_px, waist_center_x)
-    if detected_width > 0:
-        hip_width_px = max(hip_width_px, detected_width)
+    hip_width_px = refine_width(hip_width_px, detected_width)
     hip_depth_ratio = depth_ratio_at(waist_center_x, left_hip.y)
     measurements["hip_width"] = pixel_to_cm(hip_width_px)
     measurements["hip"] = calculate_circumference(hip_width_px, hip_depth_ratio)
@@ -238,7 +269,7 @@ def measure():
     if not is_valid:
         return jsonify({"error": error_msg, "code": "INVALID_POSE"}), 400
 
-    scale_factor = CARD_WIDTH_CM / card_box_width_px
+    cm_per_px = scale_factor(card_box_width_px)
 
     image_height, image_width, _ = frame.shape
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -248,13 +279,13 @@ def measure():
 
     depth_map = estimate_depth(frame)
     measurements = calculate_measurements(
-        results, scale_factor, image_width, image_height, depth_map, frame
+        results, cm_per_px, image_width, image_height, depth_map, frame
     )
 
     return jsonify({
         "measurements": measurements,
         "debug_info": {
-            "scale_factor_cm_per_px": scale_factor,
+            "scale_factor_cm_per_px": cm_per_px,
             "card_box_width_px": card_box_width_px,
             "depth_refinement": depth_map is not None,
         },

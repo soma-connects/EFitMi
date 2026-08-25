@@ -70,9 +70,10 @@ actual scale reference this project is built around. See
 ## Accuracy status — read before trusting a number
 
 The card calibration itself is verified: `service/test_calibration.py` checks
-the pixel→cm arithmetic, and an end-to-end run confirms shoulder, chest and
-waist scale exactly linearly with the confirmed card width (doubling the card
-box halves the measurements, as it must).
+the pixel→cm arithmetic, and an end-to-end run confirms **every** measurement
+— shoulder, chest, waist and hip — scales exactly linearly with the confirmed
+card width (doubling the card box halves the measurements, as it must).
+Repeated requests with identical input now return identical results.
 
 What is **not** yet verified:
 
@@ -81,12 +82,6 @@ What is **not** yet verified:
   they were tuned against its height-guess calibration. They have not been
   re-checked against a real tape measure since the calibration was replaced.
   Treat them as provisional.
-- **Hip is the least reliable output.** Its width uses
-  `max(landmark_estimate, contour_detected_width)`, and the contour value has
-  a hardcoded floor of 10% of image width — a pixel constant that doesn't
-  scale with calibration. So hip does *not* scale linearly with card width the
-  way the other measurements do, and either term can dominate depending on
-  framing.
 - Accuracy depends on the card being flat to the camera and roughly coplanar
   with the body. A tilted card reads narrower than it is, which inflates every
   measurement proportionally.
