@@ -8,7 +8,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { cmPerPixel, computeMeasurements, measure, refineWidth } from "./measure";
+import {
+  cmPerPixel,
+  computeMeasurements,
+  measure,
+  refineWidth,
+  shoulderWidthCm,
+} from "./measure";
 import { CARD_WIDTH_MM, LANDMARK } from "./constants";
 
 const CARD_WIDTH_CM = CARD_WIDTH_MM / 10;
@@ -188,4 +194,28 @@ test("computeMeasurements still returns just the measurements", () => {
     computeMeasurements(landmarks, image, 60),
     measure(landmarks, image, 60).measurements,
   );
+});
+
+
+test("the calibrate preview equals the measurement it previews", () => {
+  // A live readout that disagrees with the result it is previewing is worse
+  // than none: it makes the user trust a box that produces something else.
+  const image = silhouette(1280, 960, 500, 780);
+  const landmarks = landmarksFor(0.22);
+
+  for (const cardPx of [40, 66, 120, 300]) {
+    const preview = shoulderWidthCm(landmarks, 1280, cardPx);
+    const measured = computeMeasurements(landmarks, image, cardPx).shoulder_width;
+    assert.ok(preview !== null);
+    assert.ok(
+      Math.abs((preview as number) - measured) < 0.01,
+      `preview ${preview} != measured ${measured} at card ${cardPx}px`,
+    );
+  }
+});
+
+test("shoulderWidthCm refuses impossible inputs", () => {
+  const landmarks = landmarksFor(0.22);
+  assert.equal(shoulderWidthCm(landmarks, 1280, 0), null);
+  assert.equal(shoulderWidthCm(landmarks, 1280, -5), null);
 });

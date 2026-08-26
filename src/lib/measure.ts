@@ -32,6 +32,27 @@ export function cmPerPixel(cardBoxWidthPx: number): number {
 }
 
 /**
+ * Shoulder width for a given card box, in cm.
+ *
+ * The calibrate screen shows this live so the box can be sanity-checked
+ * before it's committed, and computeMeasurements reports the same figure.
+ * They must never disagree — a preview that doesn't match the result it
+ * previews is worse than no preview — so both call this.
+ */
+export function shoulderWidthCm(
+  landmarks: Landmark[],
+  imageWidth: number,
+  cardBoxWidthPx: number,
+): number | null {
+  const left = landmarks[LANDMARK.LEFT_SHOULDER];
+  const right = landmarks[LANDMARK.RIGHT_SHOULDER];
+  if (!left || !right || cardBoxWidthPx <= 0) return null;
+  const spanPx = Math.abs(left.x - right.x) * imageWidth;
+  if (spanPx <= 0) return null;
+  return spanPx * CORRECTION.SHOULDER * cmPerPixel(cardBoxWidthPx);
+}
+
+/**
  * Prefer the contour reading, but only when it corroborates the pose
  * landmarks. The scan is threshold-based, so a shadow or a loose garment can
  * make it read almost anything; taking max() of the two (as the reference
@@ -211,6 +232,8 @@ export function measure(
   const leftKnee = landmarks[LANDMARK.LEFT_KNEE];
 
   // Shoulder width — pure landmark distance, no contour involvement.
+  // Expressed in pixels here, but it is the same quantity shoulderWidthCm()
+  // reports on the calibrate screen; the shared helper keeps them identical.
   const shoulderWidthPx =
     Math.abs(leftShoulder.x * width - rightShoulder.x * width) *
     CORRECTION.SHOULDER;

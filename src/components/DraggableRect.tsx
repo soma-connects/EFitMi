@@ -104,10 +104,13 @@ export default function DraggableRect({
     const dy = e.clientY - drag.startY;
 
     if (drag.type === "move") {
-      onChange(
-        clamp({ ...drag.origin, x: drag.origin.x + dx, y: drag.origin.y + dy }),
-      );
-      reportActivePoint(e);
+      const moved = clamp({
+        ...drag.origin,
+        x: drag.origin.x + dx,
+        y: drag.origin.y + dy,
+      });
+      onChange(moved);
+      reportActivePoint(moved, drag);
       return;
     }
 
@@ -122,16 +125,36 @@ export default function DraggableRect({
       ? { ...o, width: o.width + widthDelta }
       : { ...o, width: o.width + widthDelta, height: o.height + heightDelta };
 
-    onChange(anchor(next, drag.corner, o));
-    reportActivePoint(e);
+    const anchored = anchor(next, drag.corner, o);
+    onChange(anchored);
+    reportActivePoint(anchored, drag);
   }
 
-  function reportActivePoint(e: React.PointerEvent) {
+  /**
+   * Reports the point the magnifier should centre on — the box geometry
+   * being aligned, never the fingertip.
+   *
+   * The handles sit outside the box on purpose, so they don't cover the very
+   * edge being placed. That means the fingertip is several pixels away from
+   * the corner, and a magnifier centred on it shows the wrong spot: the one
+   * place the user cannot see is exactly the one they need.
+   */
+  function reportActivePoint(next: PixelRect, drag: DragMode) {
     if (!onActivePointChange) return;
-    const host = e.currentTarget.getBoundingClientRect();
+
+    if (drag.type === "resize") {
+      const right = drag.corner === "ne" || drag.corner === "se";
+      const bottom = drag.corner === "sw" || drag.corner === "se";
+      onActivePointChange({
+        x: right ? next.x + next.width : next.x,
+        y: bottom ? next.y + next.height : next.y,
+      });
+      return;
+    }
+
     onActivePointChange({
-      x: e.clientX - host.left,
-      y: e.clientY - host.top,
+      x: next.x + next.width / 2,
+      y: next.y + next.height / 2,
     });
   }
 

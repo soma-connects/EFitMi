@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import DraggableRect, { type ActivePoint } from "./DraggableRect";
 import type { CapturedPhoto, PixelRect } from "@/lib/types";
 import { worldShoulderCm } from "@/lib/plausibility";
+import { shoulderWidthCm } from "@/lib/measure";
 import {
   scaleFor,
   toNatural as toNaturalRect,
@@ -140,13 +141,11 @@ export default function CalibrateStep({
   // exactly — which makes it a direct readout of whether the box is right.
   // If this says 31cm, the box is too wide, and every measurement will come
   // out short by the same proportion.
-  const impliedShoulderCm = (() => {
-    const ls = photo.landmarks[LANDMARK.LEFT_SHOULDER];
-    const rs = photo.landmarks[LANDMARK.RIGHT_SHOULDER];
-    const spanPx = Math.abs(ls.x - rs.x) * photo.width;
-    if (spanPx <= 0 || cardWidthNatural <= 0) return null;
-    return (spanPx * CORRECTION.SHOULDER * CARD_WIDTH_CM) / cardWidthNatural;
-  })();
+  const impliedShoulderCm = shoulderWidthCm(
+    photo.landmarks,
+    photo.width,
+    cardWidthNatural,
+  );
 
   // MediaPipe's own 3D estimate, independent of the card. When available it
   // beats a fixed range, because it adapts to this person rather than to an
