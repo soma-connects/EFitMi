@@ -123,6 +123,22 @@ What is **not** verified:
   always about 0.77 × hip by construction, regardless of the actual body.
   When you run the tape test, expect waist to be the worst of the four, and
   don't read a low waist as a calibration failure.
+
+  This compounds: because the waist baseline is too narrow, the contour
+  reading of the actual torso lands outside the ±50% corroboration bound and
+  gets discarded, so waist falls back to the landmark estimate even on a
+  clean background where chest and hip accept the contour. The overlay makes
+  this visible — waist's span is green (landmarks) where the others are blue.
+  Fixing it properly means a better waist baseline, not a looser bound;
+  loosening the bound would let real artefacts back in. Worth revisiting once
+  the tape test says how far off it actually is.
+
+- **On a cluttered background the contour is rejected everywhere**, and all
+  four widths fall back to landmark estimates. That's the safety rule
+  working, but it means the numbers are less independent than they look: in
+  a normal room, chest derives from the shoulder span and waist/hip from the
+  hip span. A plain wall behind you gives the contour scan a chance to
+  contribute.
 - Accuracy depends on the card being flat to the camera and roughly coplanar
   with the body. A tilted card reads narrower than it is, which inflates
   every measurement proportionally.
