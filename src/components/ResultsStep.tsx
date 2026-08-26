@@ -51,8 +51,8 @@ const GROUPS: Group[] = [
       "Still using inherited constants. Measure these with a tape before cutting anything.",
     validated: false,
     rows: [
-      { key: "waist_width", label: "Waist width", note: "from hip landmarks — reads low" },
-      { key: "waist", label: "Waist", note: "circumference" },
+      { key: "waist_width", label: "Waist width", note: "natural waist, not a trouser waist" },
+      { key: "waist", label: "Waist", note: "circumference — reads low, see below" },
       { key: "hip_width", label: "Hip width", note: "across the body" },
       { key: "hip", label: "Hip", note: "circumference" },
     ],

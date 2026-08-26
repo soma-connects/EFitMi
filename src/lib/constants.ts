@@ -73,10 +73,18 @@ export const CORRECTION = {
   // motivated, so the unvalidated inherited constant is the one that moved.
   CHEST: 1.059,
 
-  // NOT validated. These are still the reference project's numbers, tuned
-  // there against a height-guess calibration this project removed. Shoulder
-  // needed a 23% revision and chest an 11% one, so treat these as suspect
-  // until a tape says otherwise.
+  // NOT validated. Still the reference project's numbers, tuned there
+  // against a height-guess calibration this project removed. Shoulder needed
+  // a 23% revision and chest an 11% one, so treat these as suspect.
+  //
+  // The measurement sheet's "38/39 waist" is deliberately NOT used here. It
+  // is a trouser waist, taken over clothing at the waistband, which sits low
+  // on the hips — a different point on a different body outline from the
+  // natural waist this app measures. Calibrating on it would drag the
+  // constant toward a measurement the app never takes.
+  //
+  // Waist needs more than a new constant anyway; see the note in measure.ts
+  // where waistY is computed.
   WAIST: 1.16,
   HIP: 1.35,
 } as const;

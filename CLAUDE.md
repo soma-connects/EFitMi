@@ -36,6 +36,22 @@ geometry in one, change it in the other, and re-check parity.
 runtime and pose model are served from our own origin on purpose — a CDN
 being unreachable would break pose detection entirely.
 
+## Calibration data
+
+Shoulder and chest are calibrated against a tailor's sheet for one subject
+(body shoulder 18in, tight chest 37in) via the MediaPipe world-landmark
+path, which owes nothing to the card scale. Both reproduce the sheet.
+
+Tailor sheets write "tight / with ease" — the body figure and the figure a
+garment is cut to. `EASE_CM` holds the allowances from that sheet; a
+measurement missing from it gets no garment figure rather than an invented
+one.
+
+**Do not calibrate waist against a trouser-waist measurement.** A trouser
+waist is taken over clothing at the waistband, low on the hips; the app
+measures the natural waist. They are different points and the numbers are
+not comparable. This has already come up once.
+
 ## Things that bit us
 
 - **MediaPipe `Holistic()` defaults to `static_image_mode=False`**, which is

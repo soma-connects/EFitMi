@@ -142,6 +142,13 @@ What is **not** verified:
   these to be wrong too. A test pins their current values so any future
   change is deliberate rather than drift.
 
+  The sheet's "38/39 waist" is deliberately *not* used for this: it is a
+  trouser waist, taken over clothing at the waistband, which sits low on the
+  hips. That is a different point on a different outline from the natural
+  waist the app measures, and calibrating on it would pull the constant
+  toward a measurement the app never takes. Comparing the two and "fixing"
+  the gap is the mistake this note exists to prevent.
+
   Note what this means for the cross-check: it applies the shoulder
   correction to *both* sides, so it detects scale errors but is structurally
   blind to a wrong multiplier. Only a tape measurement can catch that.
@@ -161,8 +168,14 @@ What is **not** verified:
   clean background where chest and hip accept the contour. The overlay makes
   this visible — waist's span is green (landmarks) where the others are blue.
   Fixing it properly means a better waist baseline, not a looser bound;
-  loosening the bound would let real artefacts back in. Worth revisiting once
-  the tape test says how far off it actually is.
+  loosening the bound would let real artefacts back in.
+
+  In fact three problems stack on waist, and only the last is a constant:
+  the line sits 35% of the way from shoulder joints to hip joints, landing
+  around the lower ribs rather than the natural waist; its baseline is the
+  hip landmark span rather than the torso at that height; and the multiplier
+  is inherited. A tape measurement alone will not fix it — the measurement
+  point needs moving and needs a baseline of its own.
 
 - **On a cluttered background the contour is rejected everywhere**, and all
   four widths fall back to landmark estimates. That's the safety rule

@@ -278,7 +278,19 @@ export function measure(
   const chestWidthPx = refineWidth(chestLandmarkPx, chestDetected);
   record("Chest", chestY, chestCenterX, chestWidthPx, chestDetected, chestWidthPx);
 
-  // Waist.
+  // Waist. Three separate problems stack here, and only the last is a
+  // constant — so do not expect a tape measurement alone to fix it:
+  //
+  //   1. This line sits 35% of the way from the shoulder joints to the hip
+  //      joints, which lands around the lower ribs — above the natural
+  //      waist, and far above a trouser waistband.
+  //   2. Its baseline is the HIP landmark span, not the torso at this
+  //      height, so it is ~0.77x hip by construction whatever the body does.
+  //   3. CORRECTION.WAIST is inherited and unvalidated.
+  //
+  // Fixing it properly means moving the measurement point down and giving it
+  // a baseline of its own, then calibrating against a natural-waist tape
+  // measurement taken on bare torso — not a trouser waist over clothing.
   const waistY = leftShoulder.y + (leftHip.y - leftShoulder.y) * 0.35;
   const hipCenterX = (leftHip.x + rightHip.x) / 2;
   const waistLandmarkPx = Math.abs(rightHip.x - leftHip.x) * width * 0.9;
