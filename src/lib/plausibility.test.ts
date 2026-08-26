@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { checkPlausibility, checkScale, verdictFor } from "./plausibility";
+import {
+  checkAgainstPose,
+  checkPlausibility,
+  checkScale,
+  verdictFor,
+  worldShoulderCm,
+} from "./plausibility";
 import type { Measurements } from "./types";
 
 /** A set of readings that a tape measure would agree with. */
@@ -94,4 +100,81 @@ test("the scale check does not flag the edges of normal adult builds", () => {
       `${shoulder}cm should not be flagged`,
     );
   }
+});
+
+
+/**
+ * World landmarks in metres, with only the shoulders populated.
+ * These sit at the joint centres, so a real adult reads ~0.33-0.38m here —
+ * narrower than the across-the-shoulders figure a tailor measures.
+ */
+function world(jointMetres: number) {
+  const lm = Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0 }));
+  lm[11] = { x: jointMetres / 2, y: 0, z: 0 };
+  lm[12] = { x: -jointMetres / 2, y: 0, z: 0 };
+  return lm;
+}
+
+test("world shoulder width converts metres to cm", () => {
+  assert.ok(Math.abs((worldShoulderCm(world(0.42)) ?? 0) - 42) < 1e-6);
+  assert.equal(worldShoulderCm(undefined), null);
+  assert.equal(worldShoulderCm([]), null);
+});
+
+test("the cross-check compares like with like", () => {
+  // Both sides must carry the shoulder correction, or the check reads ~10%
+  // low on every body and cries wolf. Joints of 0.40m must agree exactly
+  // with a 44cm measurement (0.40 x 100 x 1.1).
+  const report = checkAgainstPose({ ...REALISTIC, shoulder_width: 44 }, world(0.40));
+  assert.equal(report.ok, true);
+  assert.ok(Math.abs((report.crossCheckCm ?? 0) - 44) < 1e-6);
+});
+
+test("the pose cross-check catches the real field failure", () => {
+  // Second field test: card box placed accurately, but held out in the hands
+  // at close range, so everything came out ~1.6x small.
+  const short: Measurements = {
+    shoulder_width: 27.6,
+    chest_width: 28.9,
+    chest_circumference: 78.3,
+    waist_width: 15.7,
+    waist: 42.6,
+    hip_width: 20.3,
+    hip: 55.1,
+  };
+  // Joint centres at 36cm imply an across-the-shoulders figure of 36 x 1.1.
+  const report = checkAgainstPose(short, world(0.36));
+  assert.equal(report.ok, false);
+  assert.equal(report.direction, "small");
+  assert.ok(Math.abs((report.crossCheckCm ?? 0) - 39.6) < 1e-6);
+  assert.match(report.message ?? "", /closer to the camera/);
+  assert.match(report.message ?? "", /1\.4x too small/);
+});
+
+test("the cross-check adapts to a genuinely narrow-shouldered person", () => {
+  // A fixed 36-52cm range would wrongly flag this; the cross-check does not,
+  // because the pose model sees the same narrow build.
+  const narrow = { ...REALISTIC, shoulder_width: 33 };
+  assert.equal(checkScale(narrow).ok, false, "the fixed range flags it");
+  assert.equal(checkAgainstPose(narrow, world(0.30)).ok, true, "the cross-check does not");
+});
+
+test("the cross-check catches an over-large scale", () => {
+  const large = { ...REALISTIC, shoulder_width: 70 };
+  const report = checkAgainstPose(large, world(0.36));
+  assert.equal(report.ok, false);
+  assert.equal(report.direction, "large");
+});
+
+test("the cross-check falls back to the fixed range without world landmarks", () => {
+  const short = { ...REALISTIC, shoulder_width: 27.6 };
+  const report = checkAgainstPose(short, undefined);
+  assert.equal(report.ok, false);
+  assert.equal(report.direction, "small");
+});
+
+test("normal agreement passes", () => {
+  // REALISTIC has shoulder_width 44; joints of 0.40m imply 44 exactly.
+  assert.equal(checkAgainstPose(REALISTIC, world(0.40)).ok, true);
+  assert.equal(checkAgainstPose(REALISTIC, world(0.36)).ok, true, "10% drift is tolerated");
 });

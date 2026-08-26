@@ -4,7 +4,10 @@
 // present it as a measurement. Almost always the cause is the card box: too
 // small a box inflates everything, too large deflates it.
 
+import { CORRECTION } from "./constants";
 import type { Measurements } from "./types";
+
+const SHOULDER_CORRECTION = CORRECTION.SHOULDER;
 
 interface Bound {
   key: keyof Measurements;
@@ -38,6 +41,83 @@ export interface ScaleReport {
   ok: boolean;
   direction: "small" | "large" | null;
   message: string | null;
+  /** MediaPipe's own shoulder estimate in cm, when it was available. */
+  crossCheckCm?: number;
+}
+
+/**
+ * Shoulder width in cm from MediaPipe's 3D world landmarks.
+ *
+ * These are in metres and independent of the card entirely, which is what
+ * makes them useful here — but they come from the model's body prior rather
+ * than from this person's photo, so they are a second opinion, never the
+ * measurement. Using them as the answer would be the assumed-scale mistake
+ * the card exists to avoid.
+ */
+export function worldShoulderCm(
+  worldLandmarks: Array<{ x: number; y: number; z?: number }> | undefined,
+): number | null {
+  if (!worldLandmarks || worldLandmarks.length < 13) return null;
+  const l = worldLandmarks[11];
+  const r = worldLandmarks[12];
+  if (!l || !r) return null;
+  const dx = l.x - r.x;
+  const dy = l.y - r.y;
+  const dz = (l.z ?? 0) - (r.z ?? 0);
+  const metres = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (!Number.isFinite(metres) || metres <= 0) return null;
+  return metres * 100;
+}
+
+/** How far the card-derived scale may drift from the cross-check before it's suspect. */
+const CROSS_CHECK_TOLERANCE = 0.25;
+
+/**
+ * Compares the card-derived shoulder width against MediaPipe's independent
+ * 3D estimate. This catches a mis-scaled result whatever caused it, and
+ * unlike a fixed range it adapts to the actual person — a genuinely
+ * narrow-shouldered adult will read narrow in both.
+ */
+export function checkAgainstPose(
+  m: Measurements,
+  worldLandmarks: Array<{ x: number; y: number; z?: number }> | undefined,
+): ScaleReport {
+  const joints = worldShoulderCm(worldLandmarks);
+  if (joints === null) return checkScale(m);
+
+  // Compare like with like. The world landmarks sit at the shoulder joint
+  // centres, inboard of the acromion, whereas shoulder_width applies
+  // CORRECTION.SHOULDER to approximate the across-the-shoulders measurement a
+  // tailor would take. Without applying the same factor here the check reads
+  // ~10% low on every body and cries wolf.
+  const expected = joints * SHOULDER_CORRECTION;
+
+  const measured = m.shoulder_width;
+  const ratio = measured / expected;
+
+  if (Math.abs(ratio - 1) <= CROSS_CHECK_TOLERANCE) {
+    return { ok: true, direction: null, message: null, crossCheckCm: expected };
+  }
+
+  const factor = expected / measured;
+  const tooSmall = ratio < 1;
+
+  return {
+    ok: false,
+    direction: tooSmall ? "small" : "large",
+    crossCheckCm: expected,
+    message: tooSmall
+      ? `The pose model puts your shoulders near ${expected.toFixed(0)}cm, but the card scale ` +
+        `makes them ${measured.toFixed(0)}cm — everything here is about ${factor.toFixed(1)}x too small. ` +
+        `That happens when the card sits closer to the camera than your body: held out in ` +
+        `your hands it covers more pixels than its real size, and the effect gets far worse ` +
+        `the closer you are. Press the card flat against your chest, prop the phone up, and ` +
+        `stand back a couple of metres.`
+      : `The pose model puts your shoulders near ${expected.toFixed(0)}cm, but the card scale ` +
+        `makes them ${measured.toFixed(0)}cm — everything here is about ${(1 / factor).toFixed(1)}x too large. ` +
+        `The card box is probably narrower than the card, or the card was tilted away from ` +
+        `the camera.`,
+  };
 }
 
 /**

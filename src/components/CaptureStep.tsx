@@ -47,6 +47,7 @@ export default function CaptureStep({
   const rafRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const latestLandmarksRef = useRef<NormalizedLandmark[] | null>(null);
+  const latestWorldRef = useRef<NormalizedLandmark[] | null>(null);
   const okRef = useRef(false);
 
   const [facing, setFacing] = useState<Facing>("user");
@@ -82,6 +83,7 @@ export default function CaptureStep({
       width: canvas.width,
       height: canvas.height,
       landmarks,
+      worldLandmarks: latestWorldRef.current ?? undefined,
     });
   }, [onCapture, stopStream]);
 
@@ -145,6 +147,7 @@ export default function CaptureStep({
           const result = landmarker.detectForVideo(video, performance.now());
           const landmarks = result.landmarks[0] ?? null;
           latestLandmarksRef.current = landmarks;
+          latestWorldRef.current = result.worldLandmarks?.[0] ?? null;
 
           let brightness = 255;
           if (bctx && brightnessCanvas) {

@@ -147,10 +147,21 @@ What is **not** verified:
   holding the card 15-35cm forward alone costs 10-30%. A tilted card pushes
   the error the other way.
 
-  The app now guards against this: the calibrate screen shows the shoulder
-  width the current box implies, live, and flags it when it falls outside a
-  normal adult range — because a scale error moves every value together, one
-  reliable value is enough to detect it.
+  **Distance is the amplifier.** The same 25cm forward offset costs 11% at a
+  2.5m camera distance and 71% at 60cm, so an arm's-length selfie is the
+  worst case. Prop the phone up, stand back, and use the timer.
+
+  The app guards against this with an independent cross-check: MediaPipe's
+  3D world landmarks give a shoulder estimate in metres that owes nothing to
+  the card, so comparing it against the card-derived figure catches a
+  mis-scaled result whatever caused it. Both sides carry the same shoulder
+  correction, since the world landmarks sit at the joint centres rather than
+  the acromion. It is shown live on the calibrate screen while the box can
+  still be fixed, and it seeds the starting box too.
+
+  The world landmarks are never used *as* a measurement — they come from the
+  model's body prior rather than from this person, which is the assumed-scale
+  mistake the card exists to avoid. Second opinion only.
 
 The phase 1 acceptance test is physical: hold a tape measure to your own
 shoulders and compare. If a number is absurd (15cm, 300cm), that's a

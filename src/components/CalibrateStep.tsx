@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import DraggableRect, { type ActivePoint } from "./DraggableRect";
 import type { CapturedPhoto, PixelRect } from "@/lib/types";
+import { worldShoulderCm } from "@/lib/plausibility";
 import {
   scaleFor,
   toNatural as toNaturalRect,
@@ -70,10 +71,20 @@ export default function CalibrateStep({
     const lh = photo.landmarks[LANDMARK.LEFT_HIP];
     const rh = photo.landmarks[LANDMARK.RIGHT_HIP];
 
+    // Prefer the pose model's own estimate of this person's shoulders over
+    // the average-adult constant — it puts the starting box closer for
+    // people who aren't average. Still only a seed: it is never treated as a
+    // measurement (see `adjusted` below).
+    const joints = worldShoulderCm(photo.worldLandmarks);
+    const assumedShoulderCm =
+      joints !== null && joints > 15 && joints < 60
+        ? joints * CORRECTION.SHOULDER
+        : TYPICAL_SHOULDER_CM;
+
     const shoulderSpan = Math.abs(ls.x - rs.x) * photo.width;
     const seeded =
       shoulderSpan > 0
-        ? shoulderSpan * (CARD_WIDTH_CM / TYPICAL_SHOULDER_CM) * CORRECTION.SHOULDER
+        ? shoulderSpan * (CARD_WIDTH_CM / assumedShoulderCm) * CORRECTION.SHOULDER
         : photo.width * 0.1;
 
     const width = Math.min(Math.max(seeded, 12), photo.width * 0.6);
@@ -137,9 +148,20 @@ export default function CalibrateStep({
     return (spanPx * CORRECTION.SHOULDER * CARD_WIDTH_CM) / cardWidthNatural;
   })();
 
+  // MediaPipe's own 3D estimate, independent of the card. When available it
+  // beats a fixed range, because it adapts to this person rather than to an
+  // average one.
+  // Corrected the same way shoulder_width is, so the two are comparable:
+  // world landmarks sit at the joint centres, inboard of the acromion.
+  const poseJointsCm = worldShoulderCm(photo.worldLandmarks);
+  const poseShoulderCm =
+    poseJointsCm === null ? null : poseJointsCm * CORRECTION.SHOULDER;
   const shoulderLooksOff =
-    impliedShoulderCm !== null &&
-    (impliedShoulderCm < 36 || impliedShoulderCm > 52);
+    impliedShoulderCm === null
+      ? false
+      : poseShoulderCm !== null
+        ? Math.abs(impliedShoulderCm / poseShoulderCm - 1) > 0.25
+        : impliedShoulderCm < 36 || impliedShoulderCm > 52;
 
   function nudgeZoom(factor: number) {
     setUserView((v) => {
@@ -301,11 +323,18 @@ export default function CalibrateStep({
             </span>
             <span className="text-neutral-500"> across.</span>
           </p>
+          {poseShoulderCm !== null && (
+            <p className="text-xs text-neutral-500 mt-0.5">
+              The pose model independently estimates {poseShoulderCm.toFixed(0)} cm.
+            </p>
+          )}
           {shoulderLooksOff && (
             <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-              {impliedShoulderCm < 36
-                ? "That's narrow for an adult, which means the box is probably wider than the card — and every measurement will come out short by the same amount. If the card was held out in front of you rather than flat against your chest, it looks bigger than it is; press it to your body and retake."
-                : "That's broad for an adult, which means the box is probably narrower than the card — and every measurement will come out large by the same amount."}
+              {(poseShoulderCm !== null
+                ? impliedShoulderCm < poseShoulderCm
+                : impliedShoulderCm < 36)
+                ? "That's too narrow, so the box is reading wider than the card really is and every measurement will come out short. The usual cause is the card sitting closer to the camera than your body — press it flat against your chest, prop the phone up, and stand back a couple of metres."
+                : "That's too broad, so the box is reading narrower than the card really is and every measurement will come out large. Widen it onto the card's edges, and check the card wasn't tilted away from the camera."}
             </p>
           )}
         </div>

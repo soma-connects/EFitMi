@@ -6,6 +6,16 @@ export interface CapturedPhoto {
   width: number;
   height: number;
   landmarks: NormalizedLandmark[];
+  /**
+   * MediaPipe's 3D pose estimate, in metres, origin at the hip centre.
+   *
+   * Never used as a measurement — it comes from the model's body prior, not
+   * from this person, which is exactly the assumed-scale problem the card
+   * exists to avoid. It is used only as an independent second opinion on
+   * whether the card-derived scale is sane, since it doesn't depend on the
+   * card at all.
+   */
+  worldLandmarks?: NormalizedLandmark[];
 }
 
 export interface PixelRect {

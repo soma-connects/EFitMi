@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { checkPlausibility, checkScale, verdictFor } from "@/lib/plausibility";
+import { checkAgainstPose, checkPlausibility, verdictFor } from "@/lib/plausibility";
 import type { MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements } from "@/lib/types";
 
@@ -55,7 +55,10 @@ export default function ResultsStep({
   const [copied, setCopied] = useState(false);
 
   const report = useMemo(() => checkPlausibility(measurements), [measurements]);
-  const scaleReport = useMemo(() => checkScale(measurements), [measurements]);
+  const scaleReport = useMemo(
+    () => checkAgainstPose(measurements, photo.worldLandmarks),
+    [measurements, photo.worldLandmarks],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -162,7 +165,7 @@ export default function ResultsStep({
         </div>
       )}
 
-      {report.ok && !scaleReport.ok && (
+      {!scaleReport.ok && (
         <div className="w-full rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-950/40 p-3">
           <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
             The scale looks off
@@ -179,7 +182,7 @@ export default function ResultsStep({
         </div>
       )}
 
-      {!report.ok && (
+      {!report.ok && scaleReport.ok && (
         <div className="w-full rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-950/40 p-3">
           <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
             These numbers don&apos;t look right
