@@ -8,7 +8,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { cmPerPixel, computeMeasurements, refineWidth } from "./measure";
+import { cmPerPixel, computeMeasurements, measure, refineWidth } from "./measure";
 import { CARD_WIDTH_MM, LANDMARK } from "./constants";
 
 const CARD_WIDTH_CM = CARD_WIDTH_MM / 10;
@@ -138,5 +138,54 @@ test("a plausible photo gives plausible numbers", () => {
   assert.ok(
     m.shoulder_width > 30 && m.shoulder_width < 55,
     `implausible shoulder width: ${m.shoulder_width}`,
+  );
+});
+
+test("reported spans match the widths that were measured", () => {
+  // The overlay is a debugging aid, so it has to show the real geometry —
+  // a span that disagrees with its own measurement would mislead rather
+  // than explain.
+  const image = silhouette(1280, 960, 500, 780);
+  const landmarks = landmarksFor(0.22);
+  const cardPx = 0.22 * 1280 * (CARD_WIDTH_CM / 40) * 1.1;
+
+  const { measurements, spans } = measure(landmarks, image, cardPx);
+  const scale = cmPerPixel(cardPx);
+
+  const byLabel = Object.fromEntries(spans.map((s) => [s.label, s]));
+  const pairs: Array<[string, number]> = [
+    ["Chest", measurements.chest_width],
+    ["Waist", measurements.waist_width],
+    ["Hip", measurements.hip_width],
+  ];
+
+  for (const [label, cm] of pairs) {
+    const span = byLabel[label];
+    assert.ok(span, `no span reported for ${label}`);
+    const spanCm = Math.abs(span.x2 - span.x1) * 1280 * scale;
+    assert.ok(
+      Math.abs(spanCm - cm) < 0.05,
+      `${label} span (${spanCm.toFixed(2)}cm) disagrees with its measurement (${cm}cm)`,
+    );
+  }
+});
+
+test("spans say whether the contour or the landmarks decided the width", () => {
+  const landmarks = landmarksFor(0.22);
+  const cardPx = 0.22 * 1280 * (CARD_WIDTH_CM / 40) * 1.1;
+
+  // A frame-filling "body" is rejected, so every width falls to landmarks.
+  const { spans } = measure(landmarks, silhouette(1280, 960, 5, 1275), cardPx);
+  for (const span of spans) {
+    assert.equal(span.source, "landmarks", `${span.label} should not trust that contour`);
+  }
+});
+
+test("computeMeasurements still returns just the measurements", () => {
+  const image = silhouette(400, 800, 120, 280);
+  const landmarks = landmarksFor(0.3);
+  assert.deepEqual(
+    computeMeasurements(landmarks, image, 60),
+    measure(landmarks, image, 60).measurements,
   );
 });

@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { LANDMARK } from "@/lib/constants";
 import { checkPlausibility, verdictFor } from "@/lib/plausibility";
+import type { MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements } from "@/lib/types";
 
 const DISPLAY_WIDTH = 640;
@@ -38,12 +38,14 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
 export default function ResultsStep({
   photo,
   measurements,
+  spans,
   cardAdjusted,
   onStartOver,
   onAdjustCard,
 }: {
   photo: CapturedPhoto;
   measurements: Measurements;
+  spans: MeasuredSpan[];
   cardAdjusted: boolean;
   onStartOver: () => void;
   onAdjustCard: () => void;
@@ -67,46 +69,41 @@ export default function ResultsStep({
     img.onload = () => {
       ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-      const pt = (i: number) => ({
-        x: photo.landmarks[i].x * canvas.width,
-        y: photo.landmarks[i].y * canvas.height,
-      });
+      // Draw the spans that were actually measured, not just the landmarks.
+      // A "waist" line sitting on a jacket hem explains a wrong number in a
+      // way the number alone cannot.
+      spans.forEach((span) => {
+        const y = span.y * canvas.height;
+        const x1 = span.x1 * canvas.width;
+        const x2 = span.x2 * canvas.width;
+        const color = span.source === "contour" ? "#38bdf8" : "#4ade80";
 
-      const line = (
-        a: { x: number; y: number },
-        b: { x: number; y: number },
-        color: string,
-      ) => {
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo(b.x, b.y);
+        ctx.moveTo(x1, y);
+        ctx.lineTo(x2, y);
         ctx.stroke();
-      };
 
-      const dot = (p: { x: number; y: number }, color: string) => {
+        // End caps, so the exact extent is unambiguous.
+        ctx.lineWidth = 2;
+        for (const x of [x1, x2]) {
+          ctx.beginPath();
+          ctx.moveTo(x, y - 7);
+          ctx.lineTo(x, y + 7);
+          ctx.stroke();
+        }
+
+        ctx.font = "600 13px system-ui, sans-serif";
         ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.strokeStyle = "rgba(0,0,0,0.5)";
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      };
-
-      const leftShoulder = pt(LANDMARK.LEFT_SHOULDER);
-      const rightShoulder = pt(LANDMARK.RIGHT_SHOULDER);
-      const leftHip = pt(LANDMARK.LEFT_HIP);
-      const rightHip = pt(LANDMARK.RIGHT_HIP);
-
-      line(leftShoulder, rightShoulder, "#4ade80");
-      line(leftHip, rightHip, "#38bdf8");
-      [leftShoulder, rightShoulder].forEach((p) => dot(p, "#4ade80"));
-      [leftHip, rightHip].forEach((p) => dot(p, "#38bdf8"));
+        ctx.strokeStyle = "rgba(0,0,0,0.65)";
+        ctx.lineWidth = 3;
+        ctx.strokeText(span.label, x2 + 8, y + 4);
+        ctx.fillText(span.label, x2 + 8, y + 4);
+      });
     };
     img.src = photo.dataUrl;
-  }, [photo]);
+  }, [photo, spans]);
 
   const format = (cm: number) =>
     unit === "cm" ? `${cm.toFixed(1)} cm` : `${(cm / 2.54).toFixed(1)} in`;
@@ -131,8 +128,19 @@ export default function ResultsStep({
       <canvas
         ref={canvasRef}
         className="rounded-2xl shadow-lg w-full"
-        aria-label="Captured photo with detected body landmarks overlaid"
+        aria-label="Captured photo with the measured spans drawn on it"
       />
+
+      <div className="flex items-center gap-4 text-xs text-neutral-500 self-start">
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-0.5 bg-[#4ade80]" />
+          from pose landmarks
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="w-4 h-0.5 bg-[#38bdf8]" />
+          from the outline in the photo
+        </span>
+      </div>
 
       {!cardAdjusted && (
         <div className="w-full rounded-xl border border-blue-400/60 bg-blue-50 dark:bg-blue-950/40 p-3">

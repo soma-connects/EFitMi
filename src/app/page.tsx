@@ -6,7 +6,7 @@ import CalibrateStep from "@/components/CalibrateStep";
 import ResultsStep from "@/components/ResultsStep";
 import IntroStep from "@/components/IntroStep";
 import StepIndicator from "@/components/StepIndicator";
-import { computeMeasurements } from "@/lib/measure";
+import { measure, type MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements, Step } from "@/lib/types";
 
 /** Decodes the captured photo back to raw pixels for the contour scan. */
@@ -38,6 +38,7 @@ export default function Home() {
   const [step, setStep] = useState<Step>("intro");
   const [photo, setPhoto] = useState<CapturedPhoto | null>(null);
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
+  const [spans, setSpans] = useState<MeasuredSpan[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cardAdjusted, setCardAdjusted] = useState(true);
@@ -55,6 +56,7 @@ export default function Home() {
   function reset() {
     setPhoto(null);
     setMeasurements(null);
+    setSpans([]);
     setError(null);
     setStep("intro");
   }
@@ -66,7 +68,9 @@ export default function Home() {
     setCardAdjusted(adjusted);
     try {
       const image = await loadImageData(photo.dataUrl, photo.width, photo.height);
-      setMeasurements(computeMeasurements(photo.landmarks, image, cardBoxWidthPx));
+      const result = measure(photo.landmarks, image, cardBoxWidthPx);
+      setMeasurements(result.measurements);
+      setSpans(result.spans);
       setStep("results");
     } catch (err) {
       setError(
@@ -125,6 +129,7 @@ export default function Home() {
         <ResultsStep
           photo={photo}
           measurements={measurements}
+          spans={spans}
           cardAdjusted={cardAdjusted}
           onStartOver={reset}
           onAdjustCard={() => setStep("calibrate")}

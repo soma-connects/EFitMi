@@ -149,11 +149,42 @@ function getBodyWidthAtHeight(
   return widths.length ? median(widths) : null;
 }
 
+/**
+ * Where each width was actually taken, in normalized photo coordinates, and
+ * whether the contour scan or the pose landmarks won.
+ *
+ * This is what makes the result inspectable: seeing that the "waist" line
+ * landed on a jacket hem, or that the contour grabbed a doorframe, explains
+ * a wrong number in a way the number alone never can.
+ */
+export interface MeasuredSpan {
+  label: string;
+  /** Normalized y of the scanned row. */
+  y: number;
+  /** Normalized x of each end of the measured width. */
+  x1: number;
+  x2: number;
+  source: "contour" | "landmarks";
+}
+
+export interface MeasurementResult {
+  measurements: Measurements;
+  spans: MeasuredSpan[];
+}
+
 export function computeMeasurements(
   landmarks: Landmark[],
   image: ImageData,
   cardBoxWidthPx: number,
 ): Measurements {
+  return measure(landmarks, image, cardBoxWidthPx).measurements;
+}
+
+export function measure(
+  landmarks: Landmark[],
+  image: ImageData,
+  cardBoxWidthPx: number,
+): MeasurementResult {
   const { width, height } = image;
   const scale = cmPerPixel(cardBoxWidthPx);
   const grey = toGreyscale(image);
@@ -184,42 +215,77 @@ export function computeMeasurements(
     Math.abs(leftShoulder.x * width - rightShoulder.x * width) *
     CORRECTION.SHOULDER;
 
+  const spans: MeasuredSpan[] = [];
+
+  /** Records where a width was taken, centred on the scan's centre point. */
+  const record = (
+    label: string,
+    yNorm: number,
+    centerXNorm: number,
+    widthPx: number,
+    detected: number | null,
+    chosen: number,
+  ) => {
+    const half = widthPx / 2 / width;
+    spans.push({
+      label,
+      y: yNorm,
+      x1: centerXNorm - half,
+      x2: centerXNorm + half,
+      source: detected !== null && detected === chosen ? "contour" : "landmarks",
+    });
+  };
+
+  spans.push({
+    label: "Shoulder",
+    y: (leftShoulder.y + rightShoulder.y) / 2,
+    x1: Math.min(leftShoulder.x, rightShoulder.x),
+    x2: Math.max(leftShoulder.x, rightShoulder.x),
+    source: "landmarks",
+  });
+
   // Chest.
   const chestY = leftShoulder.y + (leftHip.y - leftShoulder.y) * 0.15;
   const chestCenterX = (leftShoulder.x + rightShoulder.x) / 2;
   const chestLandmarkPx =
     Math.abs((rightShoulder.x - leftShoulder.x) * width) * CORRECTION.CHEST;
-  const chestWidthPx = refineWidth(
-    chestLandmarkPx,
-    getBodyWidthAtHeight(grey, width, height, chestY * height, chestCenterX),
+  const chestDetected = getBodyWidthAtHeight(
+    grey, width, height, chestY * height, chestCenterX,
   );
+  const chestWidthPx = refineWidth(chestLandmarkPx, chestDetected);
+  record("Chest", chestY, chestCenterX, chestWidthPx, chestDetected, chestWidthPx);
 
   // Waist.
   const waistY = leftShoulder.y + (leftHip.y - leftShoulder.y) * 0.35;
   const hipCenterX = (leftHip.x + rightHip.x) / 2;
   const waistLandmarkPx = Math.abs(rightHip.x - leftHip.x) * width * 0.9;
-  const waistWidthPx =
-    refineWidth(
-      waistLandmarkPx,
-      getBodyWidthAtHeight(grey, width, height, waistY * height, hipCenterX),
-    ) * CORRECTION.WAIST;
+  const waistDetected = getBodyWidthAtHeight(
+    grey, width, height, waistY * height, hipCenterX,
+  );
+  const waistRefined = refineWidth(waistLandmarkPx, waistDetected);
+  const waistWidthPx = waistRefined * CORRECTION.WAIST;
+  record("Waist", waistY, hipCenterX, waistWidthPx, waistDetected, waistRefined);
 
   // Hip.
   const hipY = leftHip.y + (leftKnee.y - leftHip.y) * 0.1;
   const hipLandmarkPx =
     Math.abs(leftHip.x * width - rightHip.x * width) * CORRECTION.HIP;
-  const hipWidthPx = refineWidth(
-    hipLandmarkPx,
-    getBodyWidthAtHeight(grey, width, height, hipY * height, hipCenterX),
+  const hipDetected = getBodyWidthAtHeight(
+    grey, width, height, hipY * height, hipCenterX,
   );
+  const hipWidthPx = refineWidth(hipLandmarkPx, hipDetected);
+  record("Hip", hipY, hipCenterX, hipWidthPx, hipDetected, hipWidthPx);
 
   return {
-    shoulder_width: toCm(shoulderWidthPx),
-    chest_width: toCm(chestWidthPx),
-    chest_circumference: circumference(chestWidthPx),
-    waist_width: toCm(waistWidthPx),
-    waist: circumference(waistWidthPx),
-    hip_width: toCm(hipWidthPx),
-    hip: circumference(hipWidthPx),
+    measurements: {
+      shoulder_width: toCm(shoulderWidthPx),
+      chest_width: toCm(chestWidthPx),
+      chest_circumference: circumference(chestWidthPx),
+      waist_width: toCm(waistWidthPx),
+      waist: circumference(waistWidthPx),
+      hip_width: toCm(hipWidthPx),
+      hip: circumference(hipWidthPx),
+    },
+    spans,
   };
 }
