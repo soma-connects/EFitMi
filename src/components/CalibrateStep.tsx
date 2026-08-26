@@ -1,8 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import DraggableRect, { type ActivePoint } from "./DraggableRect";
 import type { CapturedPhoto, PixelRect } from "@/lib/types";
+import {
+  scaleFor,
+  toNatural as toNaturalRect,
+  toScreen as toScreenRect,
+  type View,
+} from "@/lib/viewport";
 import {
   CARD_ASPECT,
   CARD_WIDTH_MM,
@@ -19,13 +25,6 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 12;
 const LOUPE_SIZE = 104;
 const LOUPE_ZOOM = 2.5;
-
-interface View {
-  zoom: number;
-  /** Photo-space point held at the centre of the viewport. */
-  cx: number;
-  cy: number;
-}
 
 export default function CalibrateStep({
   photo,
@@ -113,31 +112,13 @@ export default function CalibrateStep({
   }, [viewport.width, baseScale, seedRect]);
 
   const view = userView ?? defaultView;
-  const scale = view ? baseScale * view.zoom : baseScale;
+  const scale = view ? scaleFor(view, viewport, photo) : baseScale;
 
   const rectNatural = rect ?? seedRect;
 
-  const toScreen = useCallback(
-    (r: PixelRect): PixelRect => ({
-      x: (r.x - (view?.cx ?? 0)) * scale + viewport.width / 2,
-      y: (r.y - (view?.cy ?? 0)) * scale + viewport.height / 2,
-      width: r.width * scale,
-      height: r.height * scale,
-    }),
-    [view, scale, viewport],
-  );
-
-  const toNatural = useCallback(
-    (r: PixelRect): PixelRect => ({
-      x: (r.x - viewport.width / 2) / scale + (view?.cx ?? 0),
-      y: (r.y - viewport.height / 2) / scale + (view?.cy ?? 0),
-      width: r.width / scale,
-      height: r.height / scale,
-    }),
-    [view, scale, viewport],
-  );
-
-  const screenRect = view ? toScreen(rectNatural) : null;
+  const screenRect = view
+    ? toScreenRect(rectNatural, view, viewport, scale)
+    : null;
 
   const cardWidthNatural = rectNatural.width;
   const lowResolution = cardWidthNatural > 0 && cardWidthNatural < 40;
@@ -206,7 +187,7 @@ export default function CalibrateStep({
             rect={screenRect}
             bounds={viewport}
             aspectRatio={lockAspect ? CARD_ASPECT : undefined}
-            onChange={(r) => setRect(toNatural(r))}
+            onChange={(r) => view && setRect(toNaturalRect(r, view, viewport, scale))}
             onActivePointChange={setActivePoint}
             onPan={(dx, dy) =>
               setUserView((v) => {
