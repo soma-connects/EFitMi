@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   checkAgainstPose,
+  checkConsistency,
   checkPlausibility,
   checkScale,
   verdictFor,
@@ -177,12 +178,53 @@ test("the measured chest matches a real tape measurement", () => {
   );
 });
 
-test("waist and hip corrections are still the unvalidated inherited ones", () => {
-  // Deliberately pinned so a future change is a conscious act, not a drift.
-  // If a tape measurement ever validates these, update the values here and
-  // say so in the README's accuracy section.
-  assert.equal(CORRECTION.WAIST, 1.16);
+test("waist is calibrated to the tailor's waistband point", () => {
+  // The sheet's 38in trouser waist was taken over clothing; an inch comes off
+  // for fabric bulk, giving 37in for the body at the waistband. Against the
+  // card-independent hip landmark span of 19.64cm that is 1.961.
+  const TARGET_CM = 37 * 2.54;
+  const HIP_SPAN_CM = 19.64;
+  const WIDTH_TO_CIRCUMFERENCE =
+    2 * Math.PI * Math.sqrt((0.25 + 0.35 * 0.35) / 2);
+
+  const predicted =
+    HIP_SPAN_CM * 0.9 * CORRECTION.WAIST * WIDTH_TO_CIRCUMFERENCE;
+  const errorPct = (Math.abs(predicted - TARGET_CM) / TARGET_CM) * 100;
+  assert.ok(
+    errorPct < 5,
+    `waist correction predicts ${predicted.toFixed(1)}cm against a ${TARGET_CM.toFixed(1)}cm target (${errorPct.toFixed(1)}% out)`,
+  );
+});
+
+test("hip is still the unvalidated inherited constant", () => {
+  // Pinned so a future change is a conscious act, not drift.
   assert.equal(CORRECTION.HIP, 1.35);
+});
+
+test("a waist far above the hip is flagged, not shipped", () => {
+  // Exactly the state calibrating waist alone produces: waist reads ~37in
+  // while hip, sharing the same landmarks with an uncalibrated constant,
+  // reads ~28in. Each value passes its own bounds; only comparing them
+  // catches it.
+  const backwards: Measurements = {
+    ...REALISTIC,
+    waist: 94,
+    hip: 72,
+  };
+  assert.equal(checkPlausibility(backwards).ok, true, "per-value bounds miss it");
+
+  const report = checkConsistency(backwards);
+  assert.equal(report.ok, false);
+  assert.match(report.message ?? "", /hip is reading low/);
+});
+
+test("a normal body passes the consistency check", () => {
+  assert.equal(checkConsistency(REALISTIC).ok, true);
+});
+
+test("consistency tolerates a genuinely thick waist", () => {
+  // Waist can exceed hip on real builds; only an impossible gap should fire.
+  assert.equal(checkConsistency({ ...REALISTIC, waist: 100, hip: 96 }).ok, true);
 });
 
 test("the pose cross-check catches the real field failure", () => {

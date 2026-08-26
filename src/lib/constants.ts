@@ -73,19 +73,28 @@ export const CORRECTION = {
   // motivated, so the unvalidated inherited constant is the one that moved.
   CHEST: 1.059,
 
-  // NOT validated. Still the reference project's numbers, tuned there
-  // against a height-guess calibration this project removed. Shoulder needed
-  // a 23% revision and chest an 11% one, so treat these as suspect.
+  // Calibrated to the tailor's waist point, deliberately: the sheet's 38in
+  // trouser waist was taken over clothing, so an inch is deducted for fabric
+  // bulk, giving 37in for the body at the waistband. Against the hip
+  // landmark span (19.64cm, derived card-independently) that gives 1.961.
   //
-  // The measurement sheet's "38/39 waist" is deliberately NOT used here. It
-  // is a trouser waist, taken over clothing at the waistband, which sits low
-  // on the hips — a different point on a different body outline from the
-  // natural waist this app measures. Calibrating on it would drag the
-  // constant toward a measurement the app never takes.
+  // Two things this does NOT mean:
   //
-  // Waist needs more than a new constant anyway; see the note in measure.ts
-  // where waistY is computed.
-  WAIST: 1.16,
+  //   - It is not the natural waist. The app measures at the lower ribs and
+  //     this constant forces that reading up to a waistband-level figure. It
+  //     is right for this subject by construction, and will drift on builds
+  //     whose rib-to-waistband proportions differ. Moving the measurement
+  //     point (see measure.ts, waistY) is the real fix.
+  //   - It is not a validated figure in the sense shoulder and chest are.
+  //     Those reproduce a direct tape reading of the thing they measure.
+  //     This is fitted to a derived target.
+  WAIST: 1.961,
+
+  // NOT validated, and now visibly inconsistent: hip shares the same hip
+  // landmark span as waist but only carries 1.35, so it reads ~28in against
+  // a 37in waist — backwards for a human body. The consistency check in
+  // plausibility.ts surfaces this rather than letting it pass silently.
+  // Needs a real hip circumference measurement.
   HIP: 1.35,
 } as const;
 

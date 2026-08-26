@@ -61,6 +61,10 @@ number that's wrong. Three guards:
   the allowance differs per measurement. Where that convention is on record
   the app shows both; where it isn't (hip), it shows the body figure alone
   rather than inventing an allowance.
+- **The measurements are checked against each other**, not just against
+  ranges. A waist far larger than the hip below it isn't a physique, it's a
+  bug — and per-value bounds can't see it, because each number looks
+  possible alone. This is what catches the current hip figure.
 - **Results are grouped by how far they can be trusted**, not by what they
   measure. Shoulder and chest reproduce a real tape measurement; waist and
   hip still use inherited constants and are shown muted, under a heading
@@ -137,17 +141,20 @@ What is **not** verified:
   depth ratio is at least anatomically motivated, so the unvalidated
   inherited constant is the one that moved.
 
-  **Waist ×1.16 and hip ×1.35 remain unvalidated** — still the reference
-  project's numbers. Shoulder needed a 23% revision and chest 11%, so expect
-  these to be wrong too. A test pins their current values so any future
-  change is deliberate rather than drift.
+  **Waist is fitted, not validated.** The sheet's 38in trouser waist was
+  taken over clothing, so an inch comes off for fabric bulk, giving 37in for
+  the body at the waistband; ×1.961 reproduces that. It is a weaker claim
+  than shoulder and chest, in two ways. The target is derived rather than
+  directly taped. And the app still measures at the lower ribs, so the
+  constant is forcing a rib reading up to a waistband figure — correct for
+  this subject by construction, liable to drift on builds with different
+  rib-to-waistband proportions. Moving the measurement point is the real fix.
 
-  The sheet's "38/39 waist" is deliberately *not* used for this: it is a
-  trouser waist, taken over clothing at the waistband, which sits low on the
-  hips. That is a different point on a different outline from the natural
-  waist the app measures, and calibrating on it would pull the constant
-  toward a measurement the app never takes. Comparing the two and "fixing"
-  the gap is the mistake this note exists to prevent.
+  **Hip ×1.35 is still the inherited constant and is now visibly wrong.**
+  It shares the same hip landmarks as waist but carries only 1.35, so it
+  reads ~28in against a 37in waist — backwards for a human body. The
+  consistency check surfaces this rather than letting it ship quietly. It
+  needs a real hip circumference measurement.
 
   Note what this means for the cross-check: it applies the shoulder
   correction to *both* sides, so it detects scale errors but is structurally

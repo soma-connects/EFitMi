@@ -208,3 +208,43 @@ export function checkPlausibility(m: Measurements): PlausibilityReport {
 
   return { ok: false, skew, message };
 }
+
+
+export interface ConsistencyReport {
+  ok: boolean;
+  message: string | null;
+}
+
+/**
+ * Checks the measurements against each other, not against a range.
+ *
+ * A body can be almost any size, but its parts stay in a rough order — a
+ * waist far larger than the hip below it is not a physique, it's a bug. This
+ * catches the class of error that per-value bounds cannot see, because each
+ * individual number looks perfectly possible on its own.
+ */
+export function checkConsistency(m: Measurements): ConsistencyReport {
+  // Waist genuinely can exceed hip on some builds, so this only fires on a
+  // gap too large to be anatomy.
+  if (m.waist > m.hip * 1.15) {
+    return {
+      ok: false,
+      message:
+        `Waist (${m.waist.toFixed(0)}cm) is well above hip (${m.hip.toFixed(0)}cm), ` +
+        `which no body does. Both are derived from the same hip landmarks and ` +
+        `only the waist correction has been calibrated, so hip is reading low. ` +
+        `Treat the hip figure as unusable until it has been measured.`,
+    };
+  }
+
+  if (m.chest_circumference > 0 && m.waist > m.chest_circumference * 1.4) {
+    return {
+      ok: false,
+      message:
+        `Waist (${m.waist.toFixed(0)}cm) is far larger than chest ` +
+        `(${m.chest_circumference.toFixed(0)}cm). One of the two is mis-calibrated.`,
+    };
+  }
+
+  return { ok: true, message: null };
+}

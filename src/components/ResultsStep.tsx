@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { checkAgainstPose, checkPlausibility, verdictFor } from "@/lib/plausibility";
+import {
+  checkAgainstPose,
+  checkConsistency,
+  checkPlausibility,
+  verdictFor,
+} from "@/lib/plausibility";
 import type { MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements } from "@/lib/types";
 import { EASE_CM } from "@/lib/constants";
@@ -51,8 +56,8 @@ const GROUPS: Group[] = [
       "Still using inherited constants. Measure these with a tape before cutting anything.",
     validated: false,
     rows: [
-      { key: "waist_width", label: "Waist width", note: "natural waist, not a trouser waist" },
-      { key: "waist", label: "Waist", note: "circumference — reads low, see below" },
+      { key: "waist_width", label: "Waist width", note: "at the trouser waistband" },
+      { key: "waist", label: "Waist", note: "circumference, at the waistband" },
       { key: "hip_width", label: "Hip width", note: "across the body" },
       { key: "hip", label: "Hip", note: "circumference" },
     ],
@@ -83,6 +88,7 @@ export default function ResultsStep({
     () => checkAgainstPose(measurements, photo.worldLandmarks),
     [measurements, photo.worldLandmarks],
   );
+  const consistency = useMemo(() => checkConsistency(measurements), [measurements]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -217,6 +223,17 @@ export default function ResultsStep({
           >
             Adjust the card box
           </button>
+        </div>
+      )}
+
+      {!consistency.ok && (
+        <div className="w-full rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-950/40 p-3">
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            These measurements disagree with each other
+          </p>
+          <p className="text-sm text-amber-700/90 dark:text-amber-200/90 mt-1">
+            {consistency.message}
+          </p>
         </div>
       )}
 
