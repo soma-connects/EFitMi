@@ -8,12 +8,12 @@ import { CARD_ASPECT } from "@/lib/constants";
  */
 const STEPS = [
   {
-    title: "Hold a bank card to your chest",
-    body: "Any ATM, debit or credit card. They're all the same standard size worldwide, which is what gives us real-world scale.",
+    title: "Press the card flat against your chest",
+    body: "Any ATM, debit or credit card — they're all the same size worldwide. It must touch your body: held out in your hands it sits closer to the camera, looks bigger than it is, and makes every measurement come out too small.",
   },
   {
-    title: "Keep the card flat to the camera",
-    body: "A tilted card looks narrower than it is, and that inflates every measurement.",
+    title: "Keep the card square to the camera",
+    body: "Tilted away, it looks narrower than it is, which pushes every measurement the other way — too large.",
   },
   {
     title: "Stand square, arms slightly out",

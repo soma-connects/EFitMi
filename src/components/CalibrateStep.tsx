@@ -124,6 +124,23 @@ export default function CalibrateStep({
   const lowResolution = cardWidthNatural > 0 && cardWidthNatural < 40;
   const adjusted = rect !== null;
 
+  // Live sanity check on the box, shown while it can still be corrected.
+  // Shoulder width is pure landmark distance, so it follows the box scale
+  // exactly — which makes it a direct readout of whether the box is right.
+  // If this says 31cm, the box is too wide, and every measurement will come
+  // out short by the same proportion.
+  const impliedShoulderCm = (() => {
+    const ls = photo.landmarks[LANDMARK.LEFT_SHOULDER];
+    const rs = photo.landmarks[LANDMARK.RIGHT_SHOULDER];
+    const spanPx = Math.abs(ls.x - rs.x) * photo.width;
+    if (spanPx <= 0 || cardWidthNatural <= 0) return null;
+    return (spanPx * CORRECTION.SHOULDER * CARD_WIDTH_CM) / cardWidthNatural;
+  })();
+
+  const shoulderLooksOff =
+    impliedShoulderCm !== null &&
+    (impliedShoulderCm < 36 || impliedShoulderCm > 52);
+
   function nudgeZoom(factor: number) {
     setUserView((v) => {
       const base = v ?? defaultView;
@@ -266,6 +283,31 @@ export default function CalibrateStep({
             onto the card&apos;s real edges — until you do, the measurements
             describe an average person rather than you.
           </p>
+        </div>
+      )}
+
+      {impliedShoulderCm !== null && (
+        <div
+          className={`w-full rounded-xl border p-3 ${
+            shoulderLooksOff
+              ? "border-amber-400/60 bg-amber-50 dark:bg-amber-950/40"
+              : "border-neutral-200 dark:border-neutral-700"
+          }`}
+        >
+          <p className="text-sm">
+            <span className="text-neutral-500">This box implies your shoulders are </span>
+            <span className="font-semibold tabular-nums">
+              {impliedShoulderCm.toFixed(0)} cm
+            </span>
+            <span className="text-neutral-500"> across.</span>
+          </p>
+          {shoulderLooksOff && (
+            <p className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+              {impliedShoulderCm < 36
+                ? "That's narrow for an adult, which means the box is probably wider than the card — and every measurement will come out short by the same amount. If the card was held out in front of you rather than flat against your chest, it looks bigger than it is; press it to your body and retake."
+                : "That's broad for an adult, which means the box is probably narrower than the card — and every measurement will come out large by the same amount."}
+            </p>
+          )}
         </div>
       )}
 

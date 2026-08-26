@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { checkPlausibility, verdictFor } from "@/lib/plausibility";
+import { checkPlausibility, checkScale, verdictFor } from "@/lib/plausibility";
 import type { MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements } from "@/lib/types";
 
@@ -55,15 +55,16 @@ export default function ResultsStep({
   const [copied, setCopied] = useState(false);
 
   const report = useMemo(() => checkPlausibility(measurements), [measurements]);
+  const scaleReport = useMemo(() => checkScale(measurements), [measurements]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
 
-    const scale = DISPLAY_WIDTH / photo.width;
+    const displayScale = DISPLAY_WIDTH / photo.width;
     canvas.width = DISPLAY_WIDTH;
-    canvas.height = photo.height * scale;
+    canvas.height = photo.height * displayScale;
 
     const img = new Image();
     img.onload = () => {
@@ -157,6 +158,23 @@ export default function ResultsStep({
             className="mt-2 text-sm font-medium underline text-blue-900 dark:text-blue-200"
           >
             Place the box on the card
+          </button>
+        </div>
+      )}
+
+      {report.ok && !scaleReport.ok && (
+        <div className="w-full rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-950/40 p-3">
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            The scale looks off
+          </p>
+          <p className="text-sm text-amber-700/90 dark:text-amber-200/90 mt-1">
+            {scaleReport.message}
+          </p>
+          <button
+            onClick={onAdjustCard}
+            className="mt-2 text-sm font-medium underline text-amber-800 dark:text-amber-200"
+          >
+            Adjust the card box
           </button>
         </div>
       )}

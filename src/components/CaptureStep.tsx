@@ -274,7 +274,7 @@ export default function CaptureStep({
             x="150" y={175 + 90 / CARD_ASPECT + 16}
             textAnchor="middle" fill="#facc15" fontSize="11"
           >
-            hold card here
+            card flat on chest
           </text>
         </svg>
 
@@ -303,7 +303,7 @@ export default function CaptureStep({
           <p className="text-neutral-500">Hold still — hold the card flat to the camera</p>
         ) : ok ? (
           <p className="text-green-500 font-medium">
-            Looking good — hold the card up and capture
+            Looking good — press the card flat to your chest
           </p>
         ) : (
           <ul className="text-amber-500 space-y-0.5">

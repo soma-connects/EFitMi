@@ -25,6 +25,62 @@ const BOUNDS: Bound[] = [
   { key: "hip", label: "Hip", min: 55, max: 170 },
 ];
 
+// A scale error moves every measurement by the same factor, so one reliable
+// value is enough to detect it — and shoulder width is the most reliable one
+// here: pure landmark distance, no contour scan, no structural fudge. These
+// are typical adult ranges, deliberately narrower than the "impossible"
+// bounds above, because a 31cm shoulder is not impossible, it's just almost
+// certainly a mis-scaled adult.
+const TYPICAL_SHOULDER_MIN_CM = 36;
+const TYPICAL_SHOULDER_MAX_CM = 52;
+
+export interface ScaleReport {
+  ok: boolean;
+  direction: "small" | "large" | null;
+  message: string | null;
+}
+
+/**
+ * Detects the failure this app is most prone to: a card box that doesn't
+ * match the card's true apparent size, which rescales every result at once.
+ *
+ * The most common cause isn't a sloppy drag — it's holding the card away
+ * from the body. A card out in front of the chest is closer to the camera
+ * than the shoulders are, so it covers more pixels than its real-world size
+ * warrants, and everything measured against it comes out too small.
+ */
+export function checkScale(m: Measurements): ScaleReport {
+  const shoulder = m.shoulder_width;
+
+  if (shoulder < TYPICAL_SHOULDER_MIN_CM) {
+    return {
+      ok: false,
+      direction: "small",
+      message:
+        `A ${shoulder.toFixed(0)}cm shoulder width is narrow for an adult, and ` +
+        `everything else here is scaled to match — so the card box was probably ` +
+        `wider than the card really is. The usual cause is holding the card out ` +
+        `in front of you: that puts it closer to the camera than your shoulders, ` +
+        `so it looks bigger than it is. Press it flat against your chest and ` +
+        `retake, or tighten the box onto the card's edges.`,
+    };
+  }
+
+  if (shoulder > TYPICAL_SHOULDER_MAX_CM) {
+    return {
+      ok: false,
+      direction: "large",
+      message:
+        `A ${shoulder.toFixed(0)}cm shoulder width is broad for an adult, and ` +
+        `everything else here is scaled to match — so the card box was probably ` +
+        `smaller than the card really is. Go back and widen it onto the card's ` +
+        `edges.`,
+    };
+  }
+
+  return { ok: true, direction: null, message: null };
+}
+
 export type Verdict = "ok" | "low" | "high";
 
 export function verdictFor(key: keyof Measurements, value: number): Verdict {

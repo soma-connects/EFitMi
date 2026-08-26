@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { checkPlausibility, verdictFor } from "./plausibility";
+import { checkPlausibility, checkScale, verdictFor } from "./plausibility";
 import type { Measurements } from "./types";
 
 /** A set of readings that a tape measure would agree with. */
@@ -52,4 +52,46 @@ test("bounds are wide enough not to reject real human variation", () => {
   // catch broken calibration, not to police body size.
   assert.equal(checkPlausibility(scaled(0.8)).ok, true);
   assert.equal(checkPlausibility(scaled(1.25)).ok, true);
+});
+
+test("a mis-scaled adult is caught even when every value is 'possible'", () => {
+  // The real-world failure: a card held out in front of the body reads
+  // larger than it is, so everything comes out ~30% short. Each value
+  // stayed inside the impossible-bounds, so nothing was flagged.
+  const short: Measurements = {
+    shoulder_width: 31.6,
+    chest_width: 33.1,
+    chest_circumference: 89.7,
+    waist_width: 18.6,
+    waist: 50.4,
+    hip_width: 24.0,
+    hip: 65.2,
+  };
+  assert.equal(checkPlausibility(short).ok, true, "hard bounds do not catch this");
+
+  const scale = checkScale(short);
+  assert.equal(scale.ok, false);
+  assert.equal(scale.direction, "small");
+  assert.match(scale.message ?? "", /in front of you/);
+});
+
+test("the scale check accepts a normal adult", () => {
+  assert.equal(checkScale(REALISTIC).ok, true);
+});
+
+test("the scale check catches the opposite error too", () => {
+  const large = { ...REALISTIC, shoulder_width: 61 };
+  const scale = checkScale(large);
+  assert.equal(scale.ok, false);
+  assert.equal(scale.direction, "large");
+});
+
+test("the scale check does not flag the edges of normal adult builds", () => {
+  for (const shoulder of [36, 40, 44, 48, 52]) {
+    assert.equal(
+      checkScale({ ...REALISTIC, shoulder_width: shoulder }).ok,
+      true,
+      `${shoulder}cm should not be flagged`,
+    );
+  }
 });

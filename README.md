@@ -139,9 +139,18 @@ What is **not** verified:
   a normal room, chest derives from the shoulder span and waist/hip from the
   hip span. A plain wall behind you gives the contour scan a chance to
   contribute.
-- Accuracy depends on the card being flat to the camera and roughly coplanar
-  with the body. A tilted card reads narrower than it is, which inflates
-  every measurement proportionally.
+- Accuracy depends on the card being flat to the camera and **touching the
+  body**. This is the largest real-world error source, confirmed by the first
+  field test: a card held out in the hands sits closer to the camera than the
+  shoulders, so it covers more pixels than its size warrants and every
+  measurement comes out proportionally small. At a 1.5-2.5m camera distance,
+  holding the card 15-35cm forward alone costs 10-30%. A tilted card pushes
+  the error the other way.
+
+  The app now guards against this: the calibrate screen shows the shoulder
+  width the current box implies, live, and flags it when it falls outside a
+  normal adult range — because a scale error moves every value together, one
+  reliable value is enough to detect it.
 
 The phase 1 acceptance test is physical: hold a tape measure to your own
 shoulders and compare. If a number is absurd (15cm, 300cm), that's a
