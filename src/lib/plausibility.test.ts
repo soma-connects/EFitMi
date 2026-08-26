@@ -9,6 +9,7 @@ import {
   worldShoulderCm,
 } from "./plausibility";
 import type { Measurements } from "./types";
+import { CORRECTION } from "./constants";
 
 /** A set of readings that a tape measure would agree with. */
 const REALISTIC: Measurements = {
@@ -121,13 +122,37 @@ test("world shoulder width converts metres to cm", () => {
   assert.equal(worldShoulderCm([]), null);
 });
 
+/** World landmarks whose corrected value is exactly `cm`. */
+function worldForShoulder(cm: number) {
+  return world(cm / CORRECTION.SHOULDER / 100);
+}
+
 test("the cross-check compares like with like", () => {
-  // Both sides must carry the shoulder correction, or the check reads ~10%
-  // low on every body and cries wolf. Joints of 0.40m must agree exactly
-  // with a 44cm measurement (0.40 x 100 x 1.1).
-  const report = checkAgainstPose({ ...REALISTIC, shoulder_width: 44 }, world(0.40));
+  // Both sides must carry the shoulder correction, or the check is biased on
+  // every body and cries wolf. Derived from the constant rather than
+  // hardcoded, so this keeps holding if the correction is revised.
+  const report = checkAgainstPose(
+    { ...REALISTIC, shoulder_width: 44 },
+    worldForShoulder(44),
+  );
   assert.equal(report.ok, true);
   assert.ok(Math.abs((report.crossCheckCm ?? 0) - 44) < 1e-6);
+});
+
+test("the measured shoulder matches a real tape measurement", () => {
+  // Ground truth from the field: a subject taping 17in (43.18cm) seam to
+  // seam produced a MediaPipe joint-centre span of 32.73cm. The correction
+  // must reproduce the tape from the pose path, which owes nothing to the
+  // card scale.
+  const TAPE_CM = 17 * 2.54;
+  const JOINT_SPAN_CM = 32.73;
+
+  const predicted = JOINT_SPAN_CM * CORRECTION.SHOULDER;
+  const errorPct = (Math.abs(predicted - TAPE_CM) / TAPE_CM) * 100;
+  assert.ok(
+    errorPct < 5,
+    `shoulder correction predicts ${predicted.toFixed(1)}cm against a ${TAPE_CM.toFixed(1)}cm tape (${errorPct.toFixed(1)}% out)`,
+  );
 });
 
 test("the pose cross-check catches the real field failure", () => {
@@ -142,13 +167,11 @@ test("the pose cross-check catches the real field failure", () => {
     hip_width: 20.3,
     hip: 55.1,
   };
-  // Joint centres at 36cm imply an across-the-shoulders figure of 36 x 1.1.
-  const report = checkAgainstPose(short, world(0.36));
+  const report = checkAgainstPose(short, worldForShoulder(43.18));
   assert.equal(report.ok, false);
   assert.equal(report.direction, "small");
-  assert.ok(Math.abs((report.crossCheckCm ?? 0) - 39.6) < 1e-6);
+  assert.ok(Math.abs((report.crossCheckCm ?? 0) - 43.18) < 1e-6);
   assert.match(report.message ?? "", /closer to the camera/);
-  assert.match(report.message ?? "", /1\.4x too small/);
 });
 
 test("the cross-check adapts to a genuinely narrow-shouldered person", () => {
@@ -156,12 +179,16 @@ test("the cross-check adapts to a genuinely narrow-shouldered person", () => {
   // because the pose model sees the same narrow build.
   const narrow = { ...REALISTIC, shoulder_width: 33 };
   assert.equal(checkScale(narrow).ok, false, "the fixed range flags it");
-  assert.equal(checkAgainstPose(narrow, world(0.30)).ok, true, "the cross-check does not");
+  assert.equal(
+    checkAgainstPose(narrow, worldForShoulder(33)).ok,
+    true,
+    "the cross-check does not",
+  );
 });
 
 test("the cross-check catches an over-large scale", () => {
   const large = { ...REALISTIC, shoulder_width: 70 };
-  const report = checkAgainstPose(large, world(0.36));
+  const report = checkAgainstPose(large, worldForShoulder(44));
   assert.equal(report.ok, false);
   assert.equal(report.direction, "large");
 });
@@ -174,7 +201,10 @@ test("the cross-check falls back to the fixed range without world landmarks", ()
 });
 
 test("normal agreement passes", () => {
-  // REALISTIC has shoulder_width 44; joints of 0.40m imply 44 exactly.
-  assert.equal(checkAgainstPose(REALISTIC, world(0.40)).ok, true);
-  assert.equal(checkAgainstPose(REALISTIC, world(0.36)).ok, true, "10% drift is tolerated");
+  assert.equal(checkAgainstPose(REALISTIC, worldForShoulder(44)).ok, true);
+  assert.equal(
+    checkAgainstPose(REALISTIC, worldForShoulder(41)).ok,
+    true,
+    "a few percent of drift is tolerated",
+  );
 });

@@ -109,11 +109,22 @@ was replaced.
 
 What is **not** verified:
 
-- **The correction multipliers are inherited and unproven.** Shoulder ×1.1,
-  chest ×1.15, waist ×1.16, hip ×1.35 come from the reference project, where
-  they were tuned against its height-guess calibration. They have not been
-  re-checked against a real tape measure since the calibration was replaced.
-  Treat them as provisional.
+- **Shoulder is now validated against a tape; the others are not.** A
+  subject taping 17in (43.2cm) seam to seam gave a MediaPipe joint-centre
+  span of 32.7cm, implying ×1.32 — and that path never touches the card, so
+  it carries no calibration error. Shoulder is set to ×1.35 (the garment
+  convention), which reproduces that tape to 2.3%. The inherited ×1.1 was
+  far too small, because MediaPipe's shoulder landmarks sit at the
+  ball-and-socket joint centres, well inboard of the bony point.
+
+  **Chest ×1.15, waist ×1.16 and hip ×1.35 are still the reference
+  project's unvalidated numbers**, tuned there against a height-guess
+  calibration that no longer exists. Given shoulder needed a 23% revision,
+  expect these to be wrong too. They need the same tape treatment.
+
+  Note what this means for the cross-check: it applies the shoulder
+  correction to *both* sides, so it detects scale errors but is structurally
+  blind to a wrong multiplier. Only a tape measurement can catch that.
 - **Circumferences are the roughest figures here.** They come from width via
   an elliptical model assuming depth ≈ 0.7 × width, not from any measurement
   of depth.

@@ -69,8 +69,16 @@ export function worldShoulderCm(
   return metres * 100;
 }
 
-/** How far the card-derived scale may drift from the cross-check before it's suspect. */
-const CROSS_CHECK_TOLERANCE = 0.25;
+/**
+ * How far the card-derived scale may drift from the cross-check before it's
+ * suspect.
+ *
+ * Tightened from 0.25 once a tape measurement showed the pose path is good
+ * to ~2% on a real subject. At 0.25 it stayed silent on a run that was 12%
+ * out, which is the error that matters — large enough to ruin a garment,
+ * small enough to look believable.
+ */
+const CROSS_CHECK_TOLERANCE = 0.12;
 
 /**
  * Compares the card-derived shoulder width against MediaPipe's independent

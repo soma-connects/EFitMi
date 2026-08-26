@@ -15,7 +15,7 @@ import {
   refineWidth,
   shoulderWidthCm,
 } from "./measure";
-import { CARD_WIDTH_MM, LANDMARK } from "./constants";
+import { CARD_WIDTH_MM, CORRECTION, LANDMARK } from "./constants";
 
 const CARD_WIDTH_CM = CARD_WIDTH_MM / 10;
 
@@ -115,13 +115,14 @@ test("a wild contour reading cannot inflate a measurement", () => {
   const absurdlyWide = silhouette(1280, 960, 5, 1275);
 
   const shoulderPx = 0.22 * 1280;
-  const cardPx = shoulderPx * (CARD_WIDTH_CM / 40) * 1.1;
+  const cardPx = shoulderPx * (CARD_WIDTH_CM / 40) * CORRECTION.SHOULDER;
   const scale = cmPerPixel(cardPx);
 
   const m = computeMeasurements(landmarks, absurdlyWide, cardPx);
 
   // With the contour rejected, hip falls back to the landmark span.
-  const hipFromLandmarks = Math.abs(0.56 - 0.44) * 1280 * 1.35 * scale;
+  const hipFromLandmarks =
+    Math.abs(0.56 - 0.44) * 1280 * CORRECTION.HIP * scale;
   assert.ok(
     Math.abs(m.hip_width - hipFromLandmarks) < 0.5,
     `hip should fall back to the landmark value ${hipFromLandmarks.toFixed(1)}, got ${m.hip_width}`,
@@ -138,7 +139,7 @@ test("a plausible photo gives plausible numbers", () => {
   const image = silhouette(1280, 960, 500, 780);
   const landmarks = landmarksFor(0.22);
   const shoulderPx = 0.22 * 1280;
-  const cardPx = shoulderPx * (CARD_WIDTH_CM / 40) * 1.1;
+  const cardPx = shoulderPx * (CARD_WIDTH_CM / 40) * CORRECTION.SHOULDER;
 
   const m = computeMeasurements(landmarks, image, cardPx);
   assert.ok(
@@ -153,7 +154,7 @@ test("reported spans match the widths that were measured", () => {
   // than explain.
   const image = silhouette(1280, 960, 500, 780);
   const landmarks = landmarksFor(0.22);
-  const cardPx = 0.22 * 1280 * (CARD_WIDTH_CM / 40) * 1.1;
+  const cardPx = 0.22 * 1280 * (CARD_WIDTH_CM / 40) * CORRECTION.SHOULDER;
 
   const { measurements, spans } = measure(landmarks, image, cardPx);
   const scale = cmPerPixel(cardPx);
@@ -178,7 +179,7 @@ test("reported spans match the widths that were measured", () => {
 
 test("spans say whether the contour or the landmarks decided the width", () => {
   const landmarks = landmarksFor(0.22);
-  const cardPx = 0.22 * 1280 * (CARD_WIDTH_CM / 40) * 1.1;
+  const cardPx = 0.22 * 1280 * (CARD_WIDTH_CM / 40) * CORRECTION.SHOULDER;
 
   // A frame-filling "body" is rejected, so every width falls to landmarks.
   const { spans } = measure(landmarks, silhouette(1280, 960, 5, 1275), cardPx);
