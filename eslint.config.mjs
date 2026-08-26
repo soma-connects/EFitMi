@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "public/mediapipe/**",
     // Python service and its virtualenv.
     "service/**",
+    // Bundled test output.
+    ".test-build/**",
   ]),
 ]);
 

@@ -47,3 +47,4 @@ next-env.d.ts
 # python measurement service
 /service/.venv/
 __pycache__/
+/.test-build/

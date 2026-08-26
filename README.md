@@ -31,6 +31,7 @@ One process — the app is fully client-side, with no backend to run.
 ```bash
 npm install
 npm run dev
+npm test     # measurement + plausibility tests
 ```
 
 Opens on http://localhost:3000. `npm install` also fetches the MediaPipe
@@ -81,6 +82,12 @@ the pixel→cm arithmetic, and an end-to-end run confirms **every** measurement
 — shoulder, chest, waist and hip — scales exactly linearly with the confirmed
 card width (doubling the card box halves the measurements, as it must).
 Repeated requests with identical input now return identical results.
+
+`npm test` runs the measurement and plausibility suites on Node's built-in
+test runner (no framework to install): scale arithmetic, linear scaling with
+card width, resolution independence, determinism, and that a wild contour
+reading can't inflate a result. Each was checked against a deliberately
+reintroduced bug to confirm it actually fails when the behaviour regresses.
 
 What is **not** yet verified:
 
