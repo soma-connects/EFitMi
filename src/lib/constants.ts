@@ -39,7 +39,22 @@ export const CORRECTION = {
   // at the ball-and-socket joint centres, several centimetres inboard of the
   // bony point on each side, and a garment's shoulder seam sits wider still.
   SHOULDER: 1.35,
-  CHEST: 1.15,
+
+  // Validated against a tape: the same subject taping a 36in (91.4cm) chest
+  // circumference. Chest width is derived from the shoulder landmark span,
+  // and the elliptical model turns width into circumference by a factor of
+  // ~2.71, so the pose path's 32.7cm joint span pins this at 1.03. The
+  // inherited 1.15 overshot the tape by 11.6% (it predicted a 40in chest).
+  //
+  // One circumference constrains the product, not the width and the 0.7
+  // depth ratio separately. The depth ratio is at least anatomically
+  // motivated, so the unvalidated inherited constant is the one that moved.
+  CHEST: 1.03,
+
+  // NOT validated. These are still the reference project's numbers, tuned
+  // there against a height-guess calibration this project removed. Shoulder
+  // needed a 23% revision and chest an 11% one, so treat these as suspect
+  // until a tape says otherwise.
   WAIST: 1.16,
   HIP: 1.35,
 } as const;

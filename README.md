@@ -117,10 +117,21 @@ What is **not** verified:
   far too small, because MediaPipe's shoulder landmarks sit at the
   ball-and-socket joint centres, well inboard of the bony point.
 
-  **Chest ×1.15, waist ×1.16 and hip ×1.35 are still the reference
-  project's unvalidated numbers**, tuned there against a height-guess
-  calibration that no longer exists. Given shoulder needed a 23% revision,
-  expect these to be wrong too. They need the same tape treatment.
+  **Chest is validated too.** The same subject taped a 36in (91.4cm) chest
+  circumference. Chest width derives from the shoulder landmark span, and
+  the elliptical model converts width to circumference by a fixed ~2.71, so
+  the same card-independent pose span pins chest at ×1.03 — reproducing the
+  tape exactly. The inherited ×1.15 had predicted a 40in chest, 11.6% over.
+
+  Note the limit of one circumference measurement: it constrains the
+  product, not the width correction and the 0.7 depth ratio separately. The
+  depth ratio is at least anatomically motivated, so the unvalidated
+  inherited constant is the one that moved.
+
+  **Waist ×1.16 and hip ×1.35 remain unvalidated** — still the reference
+  project's numbers. Shoulder needed a 23% revision and chest 11%, so expect
+  these to be wrong too. A test pins their current values so any future
+  change is deliberate rather than drift.
 
   Note what this means for the cross-check: it applies the shoulder
   correction to *both* sides, so it detects scale errors but is structurally

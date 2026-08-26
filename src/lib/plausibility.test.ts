@@ -155,6 +155,36 @@ test("the measured shoulder matches a real tape measurement", () => {
   );
 });
 
+test("the measured chest matches a real tape measurement", () => {
+  // Same subject, same session: a 36in (91.44cm) chest circumference.
+  // Chest width comes from the shoulder landmark span, and the elliptical
+  // model converts width to circumference by a fixed factor, so the
+  // card-independent pose span pins the chest correction the same way the
+  // shoulder one was pinned.
+  const TAPE_CHEST_CM = 36 * 2.54;
+  const JOINT_SPAN_CM = 32.73;
+
+  // C = 2*pi*sqrt((a^2 + b^2)/2) with a = w/2 and b = 0.35w.
+  const WIDTH_TO_CIRCUMFERENCE =
+    2 * Math.PI * Math.sqrt((0.25 + 0.35 * 0.35) / 2);
+
+  const predicted =
+    JOINT_SPAN_CM * CORRECTION.CHEST * WIDTH_TO_CIRCUMFERENCE;
+  const errorPct = (Math.abs(predicted - TAPE_CHEST_CM) / TAPE_CHEST_CM) * 100;
+  assert.ok(
+    errorPct < 5,
+    `chest correction predicts ${predicted.toFixed(1)}cm against a ${TAPE_CHEST_CM.toFixed(1)}cm tape (${errorPct.toFixed(1)}% out)`,
+  );
+});
+
+test("waist and hip corrections are still the unvalidated inherited ones", () => {
+  // Deliberately pinned so a future change is a conscious act, not a drift.
+  // If a tape measurement ever validates these, update the values here and
+  // say so in the README's accuracy section.
+  assert.equal(CORRECTION.WAIST, 1.16);
+  assert.equal(CORRECTION.HIP, 1.35);
+});
+
 test("the pose cross-check catches the real field failure", () => {
   // Second field test: card box placed accurately, but held out in the hands
   // at close range, so everything came out ~1.6x small.
