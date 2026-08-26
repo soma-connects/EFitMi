@@ -56,6 +56,11 @@ number that's wrong. Three guards:
   named: everything too large means the box was drawn smaller than the card,
   everything too small means it was drawn larger.
 - **A card under 40px wide warns** that placement error will dominate.
+- **Body and garment figures are both shown.** A tailor's sheet writes
+  "tight / with ease" — 18/19 shoulder, 37/40 chest, 38/39 waist — because
+  the allowance differs per measurement. Where that convention is on record
+  the app shows both; where it isn't (hip), it shows the body figure alone
+  rather than inventing an allowance.
 - **Results are grouped by how far they can be trusted**, not by what they
   measure. Shoulder and chest reproduce a real tape measurement; waist and
   hip still use inherited constants and are shown muted, under a heading
@@ -114,19 +119,18 @@ was replaced.
 
 What is **not** verified:
 
-- **Shoulder is now validated against a tape; the others are not.** A
-  subject taping 17in (43.2cm) seam to seam gave a MediaPipe joint-centre
-  span of 32.7cm, implying ×1.32 — and that path never touches the card, so
-  it carries no calibration error. Shoulder is set to ×1.35 (the garment
-  convention), which reproduces that tape to 2.3%. The inherited ×1.1 was
-  far too small, because MediaPipe's shoulder landmarks sit at the
-  ball-and-socket joint centres, well inboard of the bony point.
+- **Shoulder and chest are calibrated against a tailor's sheet; waist and
+  hip are not.** The sheet records this subject's body shoulder as 18in and
+  tight chest as 37in, against a MediaPipe joint-centre span of 32.73cm — a
+  path that never touches the card, so it carries no calibration error.
+  That pins shoulder at ×1.397 and chest at ×1.059, and both reproduce the
+  sheet exactly.
 
-  **Chest is validated too.** The same subject taped a 36in (91.4cm) chest
-  circumference. Chest width derives from the shoulder landmark span, and
-  the elliptical model converts width to circumference by a fixed ~2.71, so
-  the same card-independent pose span pins chest at ×1.03 — reproducing the
-  tape exactly. The inherited ×1.15 had predicted a 40in chest, 11.6% over.
+  These supersede earlier figures of 17in and 36in (which had given ×1.35
+  and ×1.03). The sheet is the better source: a full measuring session with
+  the tight/ease convention written down. The inherited ×1.1 shoulder was
+  far too small either way, because MediaPipe's landmarks sit at the
+  ball-and-socket joint centres, well inboard of the bony point.
 
   Note the limit of one circumference measurement: it constrains the
   product, not the width correction and the 0.7 depth ratio separately. The

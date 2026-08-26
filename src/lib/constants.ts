@@ -28,28 +28,50 @@ export const LANDMARK = {
 // but a slightly worse starting guess.
 export const TYPICAL_SHOULDER_CM = 40;
 
-export const CORRECTION = {
-  // Validated against a tape: a subject measuring 17in (43.2cm) seam-to-seam
-  // gave a MediaPipe joint-centre span of 32.7cm, implying 1.32 — and this
-  // path never touches the card, so it carries no calibration error. 1.35 is
-  // that figure rounded to the garment convention, and reproduces the tape
-  // measurement to within 2.3%.
-  //
-  // The inherited 1.1 was far too small: MediaPipe's shoulder landmarks sit
-  // at the ball-and-socket joint centres, several centimetres inboard of the
-  // bony point on each side, and a garment's shoulder seam sits wider still.
-  SHOULDER: 1.35,
+/**
+ * Wearing ease, in cm — how much a tailor adds to a body measurement so the
+ * finished garment can be moved and breathed in.
+ *
+ * Taken from a real measurement sheet, where the convention is written as
+ * "tight / with ease": chest 37/40 and waist 38/39 in inches. So the ease is
+ * +3in at the chest and +1in at the waist — not a single blanket allowance,
+ * which is why it's tabulated per measurement rather than computed.
+ *
+ * A measurement absent from this table has no ease convention on record.
+ * Nothing is invented for it: the app shows the body figure alone rather
+ * than a garment figure it cannot justify.
+ */
+export const EASE_CM: Partial<Record<string, number>> = {
+  shoulder_width: 1 * 2.54,      // sheet: 18 / 19
+  chest_circumference: 3 * 2.54, // sheet: 37 / 40
+  waist: 1 * 2.54,               // sheet: 38 / 39
+};
 
-  // Validated against a tape: the same subject taping a 36in (91.4cm) chest
-  // circumference. Chest width is derived from the shoulder landmark span,
-  // and the elliptical model turns width into circumference by a factor of
-  // ~2.71, so the pose path's 32.7cm joint span pins this at 1.03. The
-  // inherited 1.15 overshot the tape by 11.6% (it predicted a 40in chest).
+export const CORRECTION = {
+  // Calibrated against a tailor's measurement sheet: this subject's body
+  // shoulder is 18in (45.7cm), with 19in being the same shoulder plus
+  // wearing ease. Against a MediaPipe joint-centre span of 32.73cm — a path
+  // that never touches the card, so it carries no calibration error — that
+  // gives 1.397.
+  //
+  // Supersedes an earlier 17in figure, which produced 1.35. The sheet value
+  // is the one to trust: it was taken as part of a full measuring session
+  // with the tight/ease convention written down.
+  //
+  // The inherited 1.1 was far too small either way: MediaPipe's shoulder
+  // landmarks sit at the ball-and-socket joint centres, several centimetres
+  // inboard of the bony point on each side.
+  SHOULDER: 1.397,
+
+  // Calibrated the same way, against the sheet's 37in (94.0cm) tight chest.
+  // Chest width derives from the shoulder landmark span and the elliptical
+  // model turns width into circumference by ~2.71, so the 32.73cm joint span
+  // pins this at 1.059. Supersedes an earlier 36in figure (1.03).
   //
   // One circumference constrains the product, not the width and the 0.7
   // depth ratio separately. The depth ratio is at least anatomically
   // motivated, so the unvalidated inherited constant is the one that moved.
-  CHEST: 1.03,
+  CHEST: 1.059,
 
   // NOT validated. These are still the reference project's numbers, tuned
   // there against a height-guess calibration this project removed. Shoulder

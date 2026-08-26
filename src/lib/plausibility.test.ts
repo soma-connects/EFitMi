@@ -9,7 +9,7 @@ import {
   worldShoulderCm,
 } from "./plausibility";
 import type { Measurements } from "./types";
-import { CORRECTION } from "./constants";
+import { CORRECTION, EASE_CM } from "./constants";
 
 /** A set of readings that a tape measure would agree with. */
 const REALISTIC: Measurements = {
@@ -140,11 +140,11 @@ test("the cross-check compares like with like", () => {
 });
 
 test("the measured shoulder matches a real tape measurement", () => {
-  // Ground truth from the field: a subject taping 17in (43.18cm) seam to
-  // seam produced a MediaPipe joint-centre span of 32.73cm. The correction
-  // must reproduce the tape from the pose path, which owes nothing to the
-  // card scale.
-  const TAPE_CM = 17 * 2.54;
+  // Ground truth from a tailor's measurement sheet: this subject's body
+  // shoulder is 18in (19in is the same shoulder plus wearing ease), against
+  // a MediaPipe joint-centre span of 32.73cm. The correction must reproduce
+  // the tape from the pose path, which owes nothing to the card scale.
+  const TAPE_CM = 18 * 2.54;
   const JOINT_SPAN_CM = 32.73;
 
   const predicted = JOINT_SPAN_CM * CORRECTION.SHOULDER;
@@ -156,12 +156,12 @@ test("the measured shoulder matches a real tape measurement", () => {
 });
 
 test("the measured chest matches a real tape measurement", () => {
-  // Same subject, same session: a 36in (91.44cm) chest circumference.
+  // Same sheet: a 37in tight chest (40in is the same chest with ease).
   // Chest width comes from the shoulder landmark span, and the elliptical
   // model converts width to circumference by a fixed factor, so the
   // card-independent pose span pins the chest correction the same way the
   // shoulder one was pinned.
-  const TAPE_CHEST_CM = 36 * 2.54;
+  const TAPE_CHEST_CM = 37 * 2.54;
   const JOINT_SPAN_CM = 32.73;
 
   // C = 2*pi*sqrt((a^2 + b^2)/2) with a = w/2 and b = 0.35w.
@@ -237,4 +237,21 @@ test("normal agreement passes", () => {
     true,
     "a few percent of drift is tolerated",
   );
+});
+
+
+test("wearing ease follows the tailor's sheet, per measurement", () => {
+  // The sheet writes body/with-ease as "18/19", "37/40", "38/39" — the
+  // allowance differs by measurement, so it is tabulated rather than
+  // computed from a single blanket figure.
+  assert.ok(Math.abs((EASE_CM.shoulder_width ?? 0) - 1 * 2.54) < 1e-9);
+  assert.ok(Math.abs((EASE_CM.chest_circumference ?? 0) - 3 * 2.54) < 1e-9);
+  assert.ok(Math.abs((EASE_CM.waist ?? 0) - 1 * 2.54) < 1e-9);
+});
+
+test("no ease is invented where the sheet records none", () => {
+  // Hip has no tight/ease pair on the sheet, so the app must show the body
+  // figure alone rather than a garment figure it cannot justify.
+  assert.equal(EASE_CM.hip, undefined);
+  assert.equal(EASE_CM.hip_width, undefined);
 });

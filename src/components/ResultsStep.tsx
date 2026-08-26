@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { checkAgainstPose, checkPlausibility, verdictFor } from "@/lib/plausibility";
 import type { MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements } from "@/lib/types";
+import { EASE_CM } from "@/lib/constants";
 
 const DISPLAY_WIDTH = 640;
 
@@ -142,9 +143,15 @@ export default function ResultsStep({
     // an unverified waist.
     const lines = GROUPS.flatMap((g) => [
       `${g.title}:`,
-      ...g.rows.map(
-        (r) => `  ${r.label}: ${format(measurements[r.key])}`,
-      ),
+      ...g.rows.map((r) => {
+        const ease = EASE_CM[r.key];
+        const body = format(measurements[r.key]);
+        // Tailor's convention: body / with-ease, as written on a
+        // measurement sheet (chest 37/40).
+        return ease === undefined
+          ? `  ${r.label}: ${body}`
+          : `  ${r.label}: ${body} tight / ${format(measurements[r.key] + ease)} with ease`;
+      }),
       "",
     ]);
     lines.push("Estimated from a photo, not a substitute for a tape measure.");
@@ -278,6 +285,7 @@ export default function ResultsStep({
               {group.rows.map((r) => {
                 const value = measurements[r.key];
                 const verdict = verdictFor(r.key, value);
+                const ease = EASE_CM[r.key];
                 return (
                   <div
                     key={`${group.title}-${r.key}`}
@@ -289,22 +297,29 @@ export default function ResultsStep({
                         <p className="text-xs text-neutral-500">{r.note}</p>
                       )}
                     </div>
-                    <p
-                      className={`text-lg font-semibold tabular-nums ${
-                        verdict !== "ok"
-                          ? "text-amber-500"
-                          : group.validated
-                            ? ""
-                            : "text-neutral-500"
-                      }`}
-                      title={
-                        verdict === "ok"
-                          ? undefined
-                          : `Outside the expected range (${verdict})`
-                      }
-                    >
-                      {format(value)}
-                    </p>
+                    <div className="text-right">
+                      <p
+                        className={`text-lg font-semibold tabular-nums ${
+                          verdict !== "ok"
+                            ? "text-amber-500"
+                            : group.validated
+                              ? ""
+                              : "text-neutral-500"
+                        }`}
+                        title={
+                          verdict === "ok"
+                            ? undefined
+                            : `Outside the expected range (${verdict})`
+                        }
+                      >
+                        {format(value)}
+                      </p>
+                      {ease !== undefined && (
+                        <p className="text-xs text-neutral-500 tabular-nums">
+                          {format(value + ease)} with ease
+                        </p>
+                      )}
+                    </div>
                   </div>
                 );
               })}
