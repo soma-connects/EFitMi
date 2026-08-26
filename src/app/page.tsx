@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CaptureStep from "@/components/CaptureStep";
 import CalibrateStep from "@/components/CalibrateStep";
 import ResultsStep from "@/components/ResultsStep";
@@ -41,6 +41,16 @@ export default function Home() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cardAdjusted, setCardAdjusted] = useState(true);
+  const stepRegionRef = useRef<HTMLDivElement>(null);
+
+  // Each step swaps the whole screen without navigating, so focus would
+  // otherwise stay on the button that was just clicked (or be lost entirely
+  // when that button unmounts). Move it to the new step's container so
+  // keyboard and screen-reader users land where the content is.
+  useEffect(() => {
+    if (step === "intro") return;
+    stepRegionRef.current?.focus();
+  }, [step]);
 
   function reset() {
     setPhoto(null);
@@ -80,6 +90,12 @@ export default function Home() {
 
       <StepIndicator current={step} />
 
+      <div
+        ref={stepRegionRef}
+        tabIndex={-1}
+        aria-live="polite"
+        className="w-full flex flex-col items-center outline-none"
+      >
       {step === "intro" && <IntroStep onStart={() => setStep("capture")} />}
 
       {step === "capture" && (
@@ -114,6 +130,7 @@ export default function Home() {
           onAdjustCard={() => setStep("calibrate")}
         />
       )}
+      </div>
     </main>
   );
 }

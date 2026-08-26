@@ -240,10 +240,38 @@ export default function ResultsStep({
         ))}
       </div>
 
+      <details className="w-full rounded-xl border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+        <summary className="px-4 py-3 text-sm font-medium cursor-pointer select-none">
+          Getting a more accurate result
+        </summary>
+        <ul className="px-4 pb-3 space-y-2 text-sm text-neutral-600 dark:text-neutral-300">
+          <li>
+            <span className="font-medium">The card box is everything.</span>{" "}
+            It scales every number here — a 10% error in the box is a 10% error
+            in every measurement. Zoom right in when you place it.
+          </li>
+          <li>
+            <span className="font-medium">Keep the card flat on.</span> Tilted
+            away from the camera it reads narrower than it is, which makes you
+            measure larger than you are.
+          </li>
+          <li>
+            <span className="font-medium">Stand square and step back.</span>{" "}
+            Turning even slightly shortens your shoulder span, and the further
+            you are, the fewer pixels the card covers.
+          </li>
+          <li>
+            <span className="font-medium">Wear something close-fitting.</span>{" "}
+            The width scan follows the outline it can see, so a loose garment
+            is measured instead of you.
+          </li>
+        </ul>
+      </details>
+
       <p className="text-xs text-neutral-500 text-center">
         Estimates, not tailoring-grade measurements. Circumferences are derived
         from width using an elliptical model, so they are the roughest figures
-        here.
+        here — check them against a tape before trusting them for a garment.
       </p>
 
       <div className="flex gap-3 w-full">

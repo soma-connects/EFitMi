@@ -204,6 +204,10 @@ export default function DraggableRect({
 
       <div
         onPointerDown={(e) => {
+          // Must not reach the root's pan handler, which would otherwise
+          // overwrite this move-drag and pan the view instead of moving
+          // the box.
+          e.stopPropagation();
           e.currentTarget.setPointerCapture(e.pointerId);
           startDrag({ type: "move", startX: e.clientX, startY: e.clientY, origin: rect });
         }}
