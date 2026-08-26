@@ -56,6 +56,11 @@ number that's wrong. Three guards:
   named: everything too large means the box was drawn smaller than the card,
   everything too small means it was drawn larger.
 - **A card under 40px wide warns** that placement error will dominate.
+- **Results are grouped by how far they can be trusted**, not by what they
+  measure. Shoulder and chest reproduce a real tape measurement; waist and
+  hip still use inherited constants and are shown muted, under a heading
+  saying so. The copied text carries the same split, since that is what
+  actually reaches a tailor.
 
 ## Running it locally
 

@@ -15,22 +15,45 @@ interface Row {
   note?: string;
 }
 
-const GROUPS: Array<{ title: string; rows: Row[] }> = [
+interface Group {
+  title: string;
+  /** Shown under the heading, explaining how far to trust the group. */
+  caption: string;
+  validated: boolean;
+  rows: Row[];
+}
+
+/**
+ * Grouped by how much the numbers can be trusted, not by what they measure.
+ *
+ * Shoulder and chest have been checked against a tape on a real subject and
+ * reproduce it. Waist and hip still use the reference project's constants,
+ * tuned there against a calibration this project removed — and waist is
+ * additionally derived from the *hip* landmarks, so it is low by
+ * construction. Presenting all seven with equal weight would imply a
+ * confidence three of them haven't earned.
+ */
+const GROUPS: Group[] = [
   {
-    title: "Widths",
+    title: "Checked against a tape",
+    caption: "These corrections were calibrated on a real body and reproduce it.",
+    validated: true,
     rows: [
-      { key: "shoulder_width", label: "Shoulder" },
-      { key: "chest_width", label: "Chest" },
-      { key: "waist_width", label: "Waist", note: "derived from hip landmarks" },
-      { key: "hip_width", label: "Hip" },
+      { key: "shoulder_width", label: "Shoulder", note: "seam to seam" },
+      { key: "chest_circumference", label: "Chest", note: "circumference" },
+      { key: "chest_width", label: "Chest width", note: "across the body" },
     ],
   },
   {
-    title: "Circumferences",
+    title: "Not yet verified",
+    caption:
+      "Still using inherited constants. Measure these with a tape before cutting anything.",
+    validated: false,
     rows: [
-      { key: "chest_circumference", label: "Chest", note: "estimated" },
-      { key: "waist", label: "Waist", note: "estimated" },
-      { key: "hip", label: "Hip", note: "estimated" },
+      { key: "waist_width", label: "Waist width", note: "from hip landmarks — reads low" },
+      { key: "waist", label: "Waist", note: "circumference" },
+      { key: "hip_width", label: "Hip width", note: "across the body" },
+      { key: "hip", label: "Hip", note: "circumference" },
     ],
   },
 ];
@@ -113,11 +136,19 @@ export default function ResultsStep({
     unit === "cm" ? `${cm.toFixed(1)} cm` : `${(cm / 2.54).toFixed(1)} in`;
 
   async function copyAll() {
-    const lines = GROUPS.flatMap((g) =>
-      g.rows.map(
-        (r) => `${g.title === "Circumferences" ? `${r.label} (circ.)` : r.label}: ${format(measurements[r.key])}`,
+    // The copied text is what actually reaches a tailor, so the distinction
+    // between checked and unchecked numbers has to travel with it. A bare
+    // list would strip exactly the context that stops someone cutting from
+    // an unverified waist.
+    const lines = GROUPS.flatMap((g) => [
+      `${g.title}:`,
+      ...g.rows.map(
+        (r) => `  ${r.label}: ${format(measurements[r.key])}`,
       ),
-    );
+      "",
+    ]);
+    lines.push("Estimated from a photo, not a substitute for a tape measure.");
+
     try {
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopied(true);
@@ -231,9 +262,18 @@ export default function ResultsStep({
       <div className="w-full space-y-3">
         {GROUPS.map((group) => (
           <div key={group.title}>
-            <p className="text-xs uppercase tracking-wide text-neutral-500 mb-1">
-              {group.title}
-            </p>
+            <div className="flex items-center gap-2 mb-1">
+              <span
+                className={`inline-block w-1.5 h-1.5 rounded-full ${
+                  group.validated ? "bg-green-500" : "bg-amber-500"
+                }`}
+                aria-hidden
+              />
+              <p className="text-xs uppercase tracking-wide text-neutral-500">
+                {group.title}
+              </p>
+            </div>
+            <p className="text-xs text-neutral-500 mb-1.5">{group.caption}</p>
             <div className="divide-y divide-neutral-200 dark:divide-neutral-700 border border-neutral-200 dark:border-neutral-700 rounded-xl overflow-hidden">
               {group.rows.map((r) => {
                 const value = measurements[r.key];
@@ -251,7 +291,11 @@ export default function ResultsStep({
                     </div>
                     <p
                       className={`text-lg font-semibold tabular-nums ${
-                        verdict === "ok" ? "" : "text-amber-500"
+                        verdict !== "ok"
+                          ? "text-amber-500"
+                          : group.validated
+                            ? ""
+                            : "text-neutral-500"
                       }`}
                       title={
                         verdict === "ok"
