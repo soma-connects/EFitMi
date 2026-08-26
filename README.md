@@ -117,6 +117,12 @@ What is **not** verified:
 - **Circumferences are the roughest figures here.** They come from width via
   an elliptical model assuming depth ≈ 0.7 × width, not from any measurement
   of depth.
+- **Waist reads structurally low.** BlazePose has no waist landmark, so the
+  inherited geometry derives waist width from the *hip* landmark span
+  (×0.9×1.16) while hip uses the same span (×1.35). Waist is therefore
+  always about 0.77 × hip by construction, regardless of the actual body.
+  When you run the tape test, expect waist to be the worst of the four, and
+  don't read a low waist as a calibration failure.
 - Accuracy depends on the card being flat to the camera and roughly coplanar
   with the body. A tilted card reads narrower than it is, which inflates
   every measurement proportionally.

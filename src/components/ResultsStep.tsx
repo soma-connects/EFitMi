@@ -21,7 +21,7 @@ const GROUPS: Array<{ title: string; rows: Row[] }> = [
     rows: [
       { key: "shoulder_width", label: "Shoulder" },
       { key: "chest_width", label: "Chest" },
-      { key: "waist_width", label: "Waist" },
+      { key: "waist_width", label: "Waist", note: "derived from hip landmarks" },
       { key: "hip_width", label: "Hip" },
     ],
   },
