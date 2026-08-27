@@ -278,28 +278,27 @@ export function measure(
   const chestWidthPx = refineWidth(chestLandmarkPx, chestDetected);
   record("Chest", chestY, chestCenterX, chestWidthPx, chestDetected, chestWidthPx);
 
-  // Waist. Three separate problems stack here, and only the last is a
-  // constant — so do not expect a tape measurement alone to fix it:
+  // Waist. BlazePose has no waist landmark, so the width is derived from the
+  // HIP landmark span and CORRECTION.WAIST carries the whole hip-span ->
+  // waist-circumference ratio for a body (see constants.ts).
   //
-  //   1. This line sits 35% of the way from the shoulder joints to the hip
-  //      joints, which lands around the lower ribs — above the natural
-  //      waist, and far above a trouser waistband.
-  //   2. Its baseline is the HIP landmark span, not the torso at this
-  //      height, so it is ~0.77x hip by construction whatever the body does.
-  //   3. CORRECTION.WAIST is inherited and unvalidated.
+  // The contour scan deliberately does NOT feed this. That correction is
+  // fitted to the landmark baseline, so multiplying a contour reading of the
+  // real torso by it double-counts: an accepted contour at the ±50% bound
+  // would put the waist near 57in. In practice the contour was always
+  // rejected here — the landmark baseline is far narrower than a real torso,
+  // so the reading fell outside the bound every time — but "the guard has
+  // always caught it" is not a reason to leave a 2x error one clean
+  // background away. Waist is landmark-derived, and says so on the overlay.
   //
-  // Fixing it properly means moving the measurement point down and giving it
-  // a baseline of its own, then calibrating against a natural-waist tape
-  // measurement taken on bare torso — not a trouser waist over clothing.
-  const waistY = leftShoulder.y + (leftHip.y - leftShoulder.y) * 0.35;
+  // waistY is therefore display-only: it decides where the span is drawn, not
+  // what is measured. It sits near where a waist tape goes, so the overlay
+  // matches what the number claims to be.
+  const waistY = leftShoulder.y + (leftHip.y - leftShoulder.y) * 0.7;
   const hipCenterX = (leftHip.x + rightHip.x) / 2;
-  const waistLandmarkPx = Math.abs(rightHip.x - leftHip.x) * width * 0.9;
-  const waistDetected = getBodyWidthAtHeight(
-    grey, width, height, waistY * height, hipCenterX,
-  );
-  const waistRefined = refineWidth(waistLandmarkPx, waistDetected);
-  const waistWidthPx = waistRefined * CORRECTION.WAIST;
-  record("Waist", waistY, hipCenterX, waistWidthPx, waistDetected, waistRefined);
+  const waistWidthPx =
+    Math.abs(rightHip.x - leftHip.x) * width * 0.9 * CORRECTION.WAIST;
+  record("Waist", waistY, hipCenterX, waistWidthPx, null, waistWidthPx);
 
   // Hip.
   const hipY = leftHip.y + (leftKnee.y - leftHip.y) * 0.1;

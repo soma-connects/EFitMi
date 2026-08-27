@@ -178,11 +178,13 @@ test("the measured chest matches a real tape measurement", () => {
   );
 });
 
-test("waist is calibrated to the tailor's waistband point", () => {
-  // The sheet's 38in trouser waist was taken over clothing; an inch comes off
-  // for fabric bulk, giving 37in for the body at the waistband. Against the
-  // card-independent hip landmark span of 19.64cm that is 1.961.
-  const TARGET_CM = 37 * 2.54;
+test("the measured waist matches a real tape measurement", () => {
+  // Third figure from the same sheet: a 38in waist, confirmed by the subject
+  // as his actual body measurement rather than a trouser reading over
+  // clothing (39in is the same waist with ease). Waist width derives from the
+  // card-independent hip landmark span of 19.64cm, which pins this the same
+  // way the shoulder and chest corrections were pinned.
+  const TARGET_CM = 38 * 2.54;
   const HIP_SPAN_CM = 19.64;
   const WIDTH_TO_CIRCUMFERENCE =
     2 * Math.PI * Math.sqrt((0.25 + 0.35 * 0.35) / 2);
@@ -192,7 +194,7 @@ test("waist is calibrated to the tailor's waistband point", () => {
   const errorPct = (Math.abs(predicted - TARGET_CM) / TARGET_CM) * 100;
   assert.ok(
     errorPct < 5,
-    `waist correction predicts ${predicted.toFixed(1)}cm against a ${TARGET_CM.toFixed(1)}cm target (${errorPct.toFixed(1)}% out)`,
+    `waist correction predicts ${predicted.toFixed(1)}cm against a ${TARGET_CM.toFixed(1)}cm tape (${errorPct.toFixed(1)}% out)`,
   );
 });
 
@@ -202,13 +204,13 @@ test("hip is still the unvalidated inherited constant", () => {
 });
 
 test("a waist far above the hip is flagged, not shipped", () => {
-  // Exactly the state calibrating waist alone produces: waist reads ~37in
+  // Exactly the state calibrating waist alone produces: waist reads ~38in
   // while hip, sharing the same landmarks with an uncalibrated constant,
   // reads ~28in. Each value passes its own bounds; only comparing them
   // catches it.
   const backwards: Measurements = {
     ...REALISTIC,
-    waist: 94,
+    waist: 96.5,
     hip: 72,
   };
   assert.equal(checkPlausibility(backwards).ok, true, "per-value bounds miss it");

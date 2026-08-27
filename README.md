@@ -66,10 +66,10 @@ number that's wrong. Three guards:
   bug — and per-value bounds can't see it, because each number looks
   possible alone. This is what catches the current hip figure.
 - **Results are grouped by how far they can be trusted**, not by what they
-  measure. Shoulder and chest reproduce a real tape measurement; waist and
-  hip still use inherited constants and are shown muted, under a heading
-  saying so. The copied text carries the same split, since that is what
-  actually reaches a tailor.
+  measure. Shoulder, chest and waist reproduce a real tape measurement; hip
+  still uses an inherited constant and is shown muted, under a heading saying
+  so. The copied text carries the same split, since that is what actually
+  reaches a tailor.
 
 ## Running it locally
 
@@ -123,38 +123,42 @@ was replaced.
 
 What is **not** verified:
 
-- **Shoulder and chest are calibrated against a tailor's sheet; waist and
-  hip are not.** The sheet records this subject's body shoulder as 18in and
-  tight chest as 37in, against a MediaPipe joint-centre span of 32.73cm — a
-  path that never touches the card, so it carries no calibration error.
-  That pins shoulder at ×1.397 and chest at ×1.059, and both reproduce the
-  sheet exactly.
+- **Shoulder, chest and waist are calibrated against a tailor's sheet; hip
+  is not.** The sheet records this subject's body shoulder as 18in, tight
+  chest as 37in and waist as 38in, against a MediaPipe joint-centre shoulder
+  span of 32.73cm and hip span of 19.64cm — a path that never touches the
+  card, so it carries no calibration error. That pins shoulder at ×1.397,
+  chest at ×1.059 and waist at ×2.014, and all three reproduce the sheet
+  exactly.
 
-  These supersede earlier figures of 17in and 36in (which had given ×1.35
-  and ×1.03). The sheet is the better source: a full measuring session with
-  the tight/ease convention written down. The inherited ×1.1 shoulder was
-  far too small either way, because MediaPipe's landmarks sit at the
-  ball-and-socket joint centres, well inboard of the bony point.
+  Shoulder and chest supersede earlier figures of 17in and 36in (which had
+  given ×1.35 and ×1.03). The sheet is the better source: a full measuring
+  session with the tight/ease convention written down. The inherited ×1.1
+  shoulder was far too small either way, because MediaPipe's landmarks sit at
+  the ball-and-socket joint centres, well inboard of the bony point.
+
+  The waist figure was briefly taken for a trouser measurement over clothing
+  and discounted an inch to 37in; the subject confirmed 38in is his actual
+  body waist, so the deduction is gone and the target is a direct tape
+  reading like the other two.
 
   Note the limit of one circumference measurement: it constrains the
   product, not the width correction and the 0.7 depth ratio separately. The
   depth ratio is at least anatomically motivated, so the unvalidated
   inherited constant is the one that moved.
 
-  **Waist is fitted, not validated.** The sheet's 38in trouser waist was
-  taken over clothing, so an inch comes off for fabric bulk, giving 37in for
-  the body at the waistband; ×1.961 reproduces that. It is a weaker claim
-  than shoulder and chest, in two ways. The target is derived rather than
-  directly taped. And the app still measures at the lower ribs, so the
-  constant is forcing a rib reading up to a waistband figure — correct for
-  this subject by construction, liable to drift on builds with different
-  rib-to-waistband proportions. Moving the measurement point is the real fix.
+  **Waist is the weakest of the three, even so.** BlazePose has no waist
+  landmark, so waist width derives from the *hip* joint span and ×2.014
+  carries the entire span-to-circumference ratio. That constant encodes this
+  subject's torso proportions, not just a measurement convention, so it will
+  drift further on a different build than shoulder and chest will.
 
-  **Hip ×1.35 is still the inherited constant and is now visibly wrong.**
+  **Hip ×1.35 is still the inherited constant and is visibly wrong.**
   It shares the same hip landmarks as waist but carries only 1.35, so it
-  reads ~28in against a 37in waist — backwards for a human body. The
+  reads ~28in against a 38in waist — backwards for a human body. The
   consistency check surfaces this rather than letting it ship quietly. It
-  needs a real hip circumference measurement.
+  needs a real hip circumference measurement; nothing can derive one, since
+  the two share a baseline and differ only in their constants.
 
   Note what this means for the cross-check: it applies the shoulder
   correction to *both* sides, so it detects scale errors but is structurally
@@ -162,33 +166,27 @@ What is **not** verified:
 - **Circumferences are the roughest figures here.** They come from width via
   an elliptical model assuming depth ≈ 0.7 × width, not from any measurement
   of depth.
-- **Waist reads structurally low.** BlazePose has no waist landmark, so the
-  inherited geometry derives waist width from the *hip* landmark span
-  (×0.9×1.16) while hip uses the same span (×1.35). Waist is therefore
-  always about 0.77 × hip by construction, regardless of the actual body.
-  When you run the tape test, expect waist to be the worst of the four, and
-  don't read a low waist as a calibration failure.
+- **Waist is landmark-only, deliberately.** The contour scan feeds chest and
+  hip but not waist. ×2.014 is fitted to the hip-landmark baseline and
+  carries the whole span-to-circumference ratio, so multiplying a contour
+  reading of the real torso by it would double-count — an accepted contour at
+  the edge of the ±50% bound would put the waist near 57in.
 
-  This compounds: because the waist baseline is too narrow, the contour
-  reading of the actual torso lands outside the ±50% corroboration bound and
-  gets discarded, so waist falls back to the landmark estimate even on a
-  clean background where chest and hip accept the contour. The overlay makes
-  this visible — waist's span is green (landmarks) where the others are blue.
-  Fixing it properly means a better waist baseline, not a looser bound;
-  loosening the bound would let real artefacts back in.
+  In practice that never happened: the landmark baseline is far narrower than
+  a real torso, so every contour reading fell outside the bound and was
+  discarded anyway. But "the guard has always caught it" is not a reason to
+  leave a 2× error one clean background away, so waist now takes the landmark
+  path by construction. Its span is always drawn green in the overlay.
 
-  In fact three problems stack on waist, and only the last is a constant:
-  the line sits 35% of the way from shoulder joints to hip joints, landing
-  around the lower ribs rather than the natural waist; its baseline is the
-  hip landmark span rather than the torso at that height; and the multiplier
-  is inherited. A tape measurement alone will not fix it — the measurement
-  point needs moving and needs a baseline of its own.
+  A consequence worth knowing: the drawn waist line is display-only. It sits
+  where a waist tape goes so the overlay matches what the number claims, but
+  moving it changes nothing about the measurement.
 
-- **On a cluttered background the contour is rejected everywhere**, and all
-  four widths fall back to landmark estimates. That's the safety rule
+- **On a cluttered background the contour is rejected everywhere**, and chest
+  and hip fall back to landmark estimates too. That's the safety rule
   working, but it means the numbers are less independent than they look: in
-  a normal room, chest derives from the shoulder span and waist/hip from the
-  hip span. A plain wall behind you gives the contour scan a chance to
+  a normal room, chest derives from the shoulder span and hip from the hip
+  span. A plain wall behind you gives the contour scan a chance to
   contribute.
 - Accuracy depends on the card being flat to the camera and **touching the
   body**. This is the largest real-world error source, confirmed by the first

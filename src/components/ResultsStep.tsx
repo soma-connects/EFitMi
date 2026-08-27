@@ -32,12 +32,11 @@ interface Group {
 /**
  * Grouped by how much the numbers can be trusted, not by what they measure.
  *
- * Shoulder and chest have been checked against a tape on a real subject and
- * reproduce it. Waist and hip still use the reference project's constants,
- * tuned there against a calibration this project removed — and waist is
- * additionally derived from the *hip* landmarks, so it is low by
- * construction. Presenting all seven with equal weight would imply a
- * confidence three of them haven't earned.
+ * Shoulder, chest and waist have been checked against a tape on a real
+ * subject and reproduce it. Hip still uses the reference project's constant,
+ * tuned there against a calibration this project removed. Presenting all
+ * seven with equal weight would imply a confidence two of them haven't
+ * earned.
  */
 const GROUPS: Group[] = [
   {
@@ -48,18 +47,18 @@ const GROUPS: Group[] = [
       { key: "shoulder_width", label: "Shoulder", note: "seam to seam" },
       { key: "chest_circumference", label: "Chest", note: "circumference" },
       { key: "chest_width", label: "Chest width", note: "across the body" },
+      { key: "waist", label: "Waist", note: "circumference" },
+      { key: "waist_width", label: "Waist width", note: "across the body" },
     ],
   },
   {
     title: "Not yet verified",
     caption:
-      "Still using inherited constants. Measure these with a tape before cutting anything.",
+      "Still using an inherited constant. Measure this with a tape before cutting anything.",
     validated: false,
     rows: [
-      { key: "waist_width", label: "Waist width", note: "at the trouser waistband" },
-      { key: "waist", label: "Waist", note: "circumference, at the waistband" },
-      { key: "hip_width", label: "Hip width", note: "across the body" },
       { key: "hip", label: "Hip", note: "circumference" },
+      { key: "hip_width", label: "Hip width", note: "across the body" },
     ],
   },
 ];

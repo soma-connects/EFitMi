@@ -188,6 +188,36 @@ test("spans say whether the contour or the landmarks decided the width", () => {
   }
 });
 
+test("waist never takes a contour reading, even one the bound would accept", () => {
+  // CORRECTION.WAIST is fitted to the hip-landmark baseline and carries the
+  // whole span -> circumference ratio, so multiplying a contour reading of
+  // the real torso by it double-counts. The +-50% bound has always rejected
+  // the contour here in practice, but at 2.014 an accepted one would put the
+  // waist near 57in, so waist is landmark-only by construction rather than
+  // by luck.
+  //
+  // Both silhouettes sit inside the bound for waist's baseline (43.2px), so
+  // the old code would have taken each contour and moved the number.
+  const landmarks = landmarksFor(0.3);
+  const narrow = computeMeasurements(landmarks, silhouette(400, 800, 180, 220), 60);
+  const wide = computeMeasurements(landmarks, silhouette(400, 800, 175, 225), 60);
+
+  assert.equal(
+    narrow.waist_width,
+    wide.waist_width,
+    "waist moved with the silhouette, so a contour reading is still feeding it",
+  );
+
+  // The contrast that proves the silhouettes really do differ where the
+  // contour is trusted: hip's baseline accepts both, so hip does move.
+  assert.notEqual(narrow.hip_width, wide.hip_width);
+
+  const waistSpan = measure(landmarks, silhouette(400, 800, 175, 225), 60).spans.find(
+    (span) => span.label === "Waist",
+  );
+  assert.equal(waistSpan?.source, "landmarks");
+});
+
 test("computeMeasurements still returns just the measurements", () => {
   const image = silhouette(400, 800, 120, 280);
   const landmarks = landmarksFor(0.3);

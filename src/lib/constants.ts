@@ -73,28 +73,31 @@ export const CORRECTION = {
   // motivated, so the unvalidated inherited constant is the one that moved.
   CHEST: 1.059,
 
-  // Calibrated to the tailor's waist point, deliberately: the sheet's 38in
-  // trouser waist was taken over clothing, so an inch is deducted for fabric
-  // bulk, giving 37in for the body at the waistband. Against the hip
-  // landmark span (19.64cm, derived card-independently) that gives 1.961.
+  // Calibrated against the sheet's 38in (96.5cm) waist. The subject
+  // confirmed that figure is his actual waist, taken on the body — not a
+  // trouser measurement over clothing — so it stands on the same footing as
+  // the 18in shoulder and 37in chest: a direct tape reading of the thing
+  // being measured. (39in on the sheet is the same waist with ease.)
   //
-  // Two things this does NOT mean:
+  // Against the hip landmark span of 19.64cm, derived card-independently,
+  // that gives 2.014. An earlier 1.961 targeted 37in, from a since-retracted
+  // assumption that an inch of fabric bulk had to come off.
   //
-  //   - It is not the natural waist. The app measures at the lower ribs and
-  //     this constant forces that reading up to a waistband-level figure. It
-  //     is right for this subject by construction, and will drift on builds
-  //     whose rib-to-waistband proportions differ. Moving the measurement
-  //     point (see measure.ts, waistY) is the real fix.
-  //   - It is not a validated figure in the sense shoulder and chest are.
-  //     Those reproduce a direct tape reading of the thing they measure.
-  //     This is fitted to a derived target.
-  WAIST: 1.961,
+  // What this constant actually encodes: the ratio between this subject's
+  // MediaPipe hip-joint span and his waist circumference. Waist has no
+  // landmark of its own in BlazePose, so there is nothing better to hang it
+  // on — but it means the constant carries his torso proportions, not just a
+  // measurement convention, and will drift further on a different build than
+  // the shoulder and chest corrections do.
+  WAIST: 2.014,
 
-  // NOT validated, and now visibly inconsistent: hip shares the same hip
-  // landmark span as waist but only carries 1.35, so it reads ~28in against
-  // a 37in waist — backwards for a human body. The consistency check in
-  // plausibility.ts surfaces this rather than letting it pass silently.
-  // Needs a real hip circumference measurement.
+  // NOT validated, and visibly inconsistent: hip is derived from the same
+  // hip landmark span as waist but carries only the inherited 1.35, so it
+  // reads ~28in against a 38in waist — backwards for a human body. The
+  // consistency check in plausibility.ts surfaces this rather than letting it
+  // pass silently. Needs a real hip circumference measurement; there is no
+  // way to derive one, since the two share a baseline and only their
+  // constants differ.
   HIP: 1.35,
 } as const;
 

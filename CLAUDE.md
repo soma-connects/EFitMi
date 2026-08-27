@@ -38,19 +38,30 @@ being unreachable would break pose detection entirely.
 
 ## Calibration data
 
-Shoulder and chest are calibrated against a tailor's sheet for one subject
-(body shoulder 18in, tight chest 37in) via the MediaPipe world-landmark
-path, which owes nothing to the card scale. Both reproduce the sheet.
+Shoulder, chest and waist are calibrated against a tailor's sheet for one
+subject (body shoulder 18in, tight chest 37in, waist 38in) via the MediaPipe
+world-landmark path, which owes nothing to the card scale. All three
+reproduce the sheet. Hip has no tape figure and still carries the reference
+project's constant; it reads ~28in against a 38in waist, which
+`checkConsistency` flags on the results screen.
 
 Tailor sheets write "tight / with ease" — the body figure and the figure a
 garment is cut to. `EASE_CM` holds the allowances from that sheet; a
 measurement missing from it gets no garment figure rather than an invented
 one.
 
-**Do not calibrate waist against a trouser-waist measurement.** A trouser
-waist is taken over clothing at the waistband, low on the hips; the app
-measures the natural waist. They are different points and the numbers are
-not comparable. This has already come up once.
+**Check what a waist figure actually is before calibrating to it.** The
+sheet's 38in was first read as a trouser waist over clothing and discounted
+an inch; the subject confirmed it is his body waist, and the deduction was
+undone. A trouser waist is a different point on the body and is not
+comparable — but don't assume one either.
+
+**Waist takes no contour reading, on purpose.** `CORRECTION.WAIST` is fitted
+to the hip-landmark baseline and carries the whole span-to-circumference
+ratio, so applying it to a contour reading of the real torso double-counts —
+at the ±50% bound that is a ~57in waist. The bound happened to reject every
+contour there, but the guard is not the design. Waist is landmark-only, and
+`waistY` is display-only.
 
 ## Things that bit us
 
