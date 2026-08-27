@@ -218,6 +218,98 @@ test("waist never takes a contour reading, even one the bound would accept", () 
   assert.equal(waistSpan?.source, "landmarks");
 });
 
+/**
+ * A torso mask that narrows to a waist partway down the frame. Its width is
+ * a fraction of the mask, not a pixel count, so the same body can be rendered
+ * at any resolution.
+ */
+function torsoMask(width: number, height: number) {
+  const data = new Float32Array(width * height);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const half = (0.2 - 0.075 * Math.sin(Math.PI * (y / height))) * width;
+      data[y * width + x] = Math.abs(x - (width - 1) / 2) <= half ? 1 : 0;
+    }
+  }
+  return { width, height, data };
+}
+
+test("the segmentation mask changes no reported measurement", () => {
+  // The point of keeping it diagnostic. Every correction constant was fitted
+  // against a landmark span, so feeding one a reading of the real body would
+  // double-count — the same error that would have put the waist at 57in.
+  const image = silhouette(400, 800, 120, 280);
+  const landmarks = landmarksFor(0.3);
+
+  const without = measure(landmarks, image, 60);
+  const with_ = measure(landmarks, image, 60, torsoMask(400, 800));
+
+  assert.deepEqual(with_.measurements, without.measurements);
+  assert.equal(without.calibration, null);
+  assert.ok(with_.calibration);
+});
+
+test("the readout reports the body, not the landmark span", () => {
+  const image = silhouette(400, 800, 120, 280);
+  const landmarks = landmarksFor(0.3);
+  const { calibration } = measure(landmarks, image, 60, torsoMask(400, 800));
+  assert.ok(calibration);
+
+  // Landmark spans, uncorrected: shoulders 0.3 of 400px, hips 0.12 of 400px.
+  const scale = cmPerPixel(60);
+  assert.ok(Math.abs(calibration.shoulderJointSpanCm - 0.3 * 400 * scale) < 0.02);
+  assert.ok(Math.abs(calibration.hipJointSpanCm - 0.12 * 400 * scale) < 0.02);
+
+  // The mask is far wider than the hip joints are apart, which is the whole
+  // reason a constant fitted to that span carries body proportions.
+  assert.ok(calibration.waistBodyCm);
+  assert.ok(calibration.waistBodyCm > calibration.hipJointSpanCm);
+});
+
+test("the readout says where the waist actually is", () => {
+  // The shipped waist assumes 0.35 of the way from shoulders to hips and
+  // lands on the lower ribs. This is the number that replaces that guess.
+  const landmarks = landmarksFor(0.3);
+  const { calibration } = measure(
+    landmarks,
+    silhouette(400, 800, 120, 280),
+    60,
+    torsoMask(400, 800),
+  );
+  assert.ok(calibration?.waistAtFraction);
+  assert.notEqual(calibration.waistAtFraction, 0.35);
+  assert.ok(
+    calibration.waistAtFraction > 0.35 && calibration.waistAtFraction <= 0.8,
+    `waist fraction ${calibration.waistAtFraction} escaped its search bounds`,
+  );
+});
+
+test("a mask that finds no body costs a diagnostic, never a measurement", () => {
+  const image = silhouette(400, 800, 120, 280);
+  const landmarks = landmarksFor(0.3);
+  const empty = { width: 400, height: 800, data: new Float32Array(400 * 800) };
+
+  const { measurements, calibration } = measure(landmarks, image, 60, empty);
+  assert.deepEqual(measurements, computeMeasurements(landmarks, image, 60));
+  assert.equal(calibration?.chestBodyCm, null);
+  assert.equal(calibration?.waistBodyCm, null);
+  assert.equal(calibration?.waistAtFraction, null);
+});
+
+test("mask resolution does not change the readout", () => {
+  // The mask need not match the photo's size, so the conversion back to image
+  // pixels has to be right or every body figure is scaled by the ratio.
+  const landmarks = landmarksFor(0.3);
+  const image = silhouette(400, 800, 120, 280);
+  const full = measure(landmarks, image, 60, torsoMask(400, 800)).calibration;
+  const half = measure(landmarks, image, 60, torsoMask(200, 400)).calibration;
+  assert.ok(full?.waistBodyCm && half?.waistBodyCm);
+  assert.ok(
+    Math.abs(full.waistBodyCm - half.waistBodyCm) < 0.5,
+    `${full.waistBodyCm} vs ${half.waistBodyCm}`,
+  );
+});
+
 test("computeMeasurements still returns just the measurements", () => {
   const image = silhouette(400, 800, 120, 280);
   const landmarks = landmarksFor(0.3);

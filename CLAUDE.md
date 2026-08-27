@@ -63,12 +63,39 @@ at the ±50% bound that is a ~57in waist. The bound happened to reject every
 contour there, but the guard is not the design. Waist is landmark-only, and
 `waistY` is display-only.
 
+## The segmentation mask
+
+`getStillPoseLandmarker()` runs the captured photo through a second
+PoseLandmarker in IMAGE mode with `outputSegmentationMasks: true`.
+`src/lib/silhouette.ts` turns that mask into torso widths, and `findWaist`
+locates the natural waist as the narrowest point of the torso rather than at a
+fixed fraction.
+
+**It is diagnostic only, on purpose.** Every correction constant is a ratio
+between a *landmark span* and a tape reading. Feeding one a measurement of the
+real body double-counts — the same error that would have put the waist at
+57in. Refitting them against the body needs a photo with a mask first; the
+"Calibration data" panel on the results screen is how that photo yields the
+numbers. Do not wire the mask into a reported measurement until the constant
+it feeds has been refitted against it.
+
 ## Things that bit us
 
 - **MediaPipe `Holistic()` defaults to `static_image_mode=False`**, which is
   video-tracking mode: a shared detector carries state between calls and
   returns different landmarks for the same photo. Any server-side pose work
-  must pass `static_image_mode=True`.
+  must pass `static_image_mode=True`. The browser has the same trap: the
+  preview loop runs `runningMode: "VIDEO"`, which tracks and smooths across
+  frames, so the landmarks the *measurement* uses are still tracking-mode
+  output. `getStillPoseLandmarker()` is the IMAGE-mode fix; switching the
+  measurement onto it will move the numbers slightly, so it waits for the
+  same refit as the mask.
+- **The inherited contour scan never worked outside a studio.** It walked
+  outward until it found a pixel darker than luma 50, so it only found an edge
+  on a bright body against a near-black background — measured across five
+  lighting arrangements it contributed to exactly one, the test fixture. Every
+  number this app has ever produced is a landmark span times a fitted
+  constant. `MPMask` from the pose model replaces it.
 - **mediapipe 1.x removed `mp.solutions`.** `service/` is pinned to 0.10.20
   and needs numpy 1.x. Don't bump without porting to the tasks API.
 - **The calibrate box lives in photo pixels, not screen pixels.** Screen

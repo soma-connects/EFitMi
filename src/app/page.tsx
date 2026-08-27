@@ -6,15 +6,25 @@ import CalibrateStep from "@/components/CalibrateStep";
 import ResultsStep from "@/components/ResultsStep";
 import IntroStep from "@/components/IntroStep";
 import StepIndicator from "@/components/StepIndicator";
-import { measure, type MeasuredSpan } from "@/lib/measure";
+import {
+  measure,
+  type CalibrationReadout,
+  type MeasuredSpan,
+} from "@/lib/measure";
+import { analyseStill } from "@/lib/pose";
 import type { CapturedPhoto, Measurements, Step } from "@/lib/types";
 
-/** Decodes the captured photo back to raw pixels for the contour scan. */
-function loadImageData(
+/**
+ * Decodes the captured photo back to raw pixels.
+ *
+ * The canvas comes back too, because the still pose pass needs the decoded
+ * image and decoding it a second time would be wasteful on a phone.
+ */
+function loadPhoto(
   dataUrl: string,
   width: number,
   height: number,
-): Promise<ImageData> {
+): Promise<{ image: ImageData; canvas: HTMLCanvasElement }> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => {
@@ -27,7 +37,7 @@ function loadImageData(
         return;
       }
       ctx.drawImage(img, 0, 0, width, height);
-      resolve(ctx.getImageData(0, 0, width, height));
+      resolve({ image: ctx.getImageData(0, 0, width, height), canvas });
     };
     img.onerror = () => reject(new Error("Could not read the captured photo."));
     img.src = dataUrl;
@@ -39,6 +49,7 @@ export default function Home() {
   const [photo, setPhoto] = useState<CapturedPhoto | null>(null);
   const [measurements, setMeasurements] = useState<Measurements | null>(null);
   const [spans, setSpans] = useState<MeasuredSpan[]>([]);
+  const [calibration, setCalibration] = useState<CalibrationReadout | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cardAdjusted, setCardAdjusted] = useState(true);
@@ -57,6 +68,7 @@ export default function Home() {
     setPhoto(null);
     setMeasurements(null);
     setSpans([]);
+    setCalibration(null);
     setError(null);
     setStep("intro");
   }
@@ -67,10 +79,19 @@ export default function Home() {
     setError(null);
     setCardAdjusted(adjusted);
     try {
-      const image = await loadImageData(photo.dataUrl, photo.width, photo.height);
-      const result = measure(photo.landmarks, image, cardBoxWidthPx);
+      const { image, canvas } = await loadPhoto(
+        photo.dataUrl,
+        photo.width,
+        photo.height,
+      );
+      // Diagnostic only, and allowed to fail: analyseStill swallows its own
+      // errors so a GPU that will not produce a mask costs the readout, not
+      // the user's measurements.
+      const { silhouette } = await analyseStill(canvas);
+      const result = measure(photo.landmarks, image, cardBoxWidthPx, silhouette);
       setMeasurements(result.measurements);
       setSpans(result.spans);
+      setCalibration(result.calibration);
       setStep("results");
     } catch (err) {
       setError(
@@ -130,6 +151,7 @@ export default function Home() {
           photo={photo}
           measurements={measurements}
           spans={spans}
+          calibration={calibration}
           cardAdjusted={cardAdjusted}
           onStartOver={reset}
           onAdjustCard={() => setStep("calibrate")}

@@ -35,9 +35,12 @@ This makes the measurement *relative* to a real object rather than absolute
    to the card's real proportions so only the width has to be matched.
    `cm_per_px = 8.56 / card_box_width_px`.
 3. **Measure** — `src/lib/measure.ts` converts landmark distances to
-   centimetres with that scale, refines the widths against a contour scan of
-   the photo, and derives circumferences from an elliptical approximation.
-   Entirely in the browser; the photo never leaves the device.
+   centimetres with that scale and derives circumferences from an elliptical
+   approximation. The photo also goes through a second pose pass that emits a
+   person/background segmentation mask, which is read for the torso's real
+   width; that is reported as calibration data rather than folded into the
+   numbers (see below). Entirely in the browser; the photo never leaves the
+   device.
 4. **Results** — the photo with landmarks drawn on it, the measurements in
    cm or inches, and a warning if anything looks impossible.
 
@@ -166,28 +169,45 @@ What is **not** verified:
 - **Circumferences are the roughest figures here.** They come from width via
   an elliptical model assuming depth ≈ 0.7 × width, not from any measurement
   of depth.
-- **Waist is landmark-only, deliberately.** The contour scan feeds chest and
-  hip but not waist. ×2.014 is fitted to the hip-landmark baseline and
-  carries the whole span-to-circumference ratio, so multiplying a contour
-  reading of the real torso by it would double-count — an accepted contour at
-  the edge of the ±50% bound would put the waist near 57in.
+- **No reported number is a measurement of the body.** Every one is a pose
+  landmark span multiplied by a constant fitted to one subject. That was not
+  the intent — the pipeline inherited a "contour-assisted" width scan meant to
+  read the real silhouette — but that scan walks outward from the body centre
+  until it finds a pixel darker than luma 50, so it only finds an edge on a
+  bright body against a near-black background. Across five lighting
+  arrangements it contributed to exactly one: the synthetic fixture in the
+  test suite. On a dark shirt it stops at the first pixel; on a light wall it
+  never stops.
 
-  In practice that never happened: the landmark baseline is far narrower than
-  a real torso, so every contour reading fell outside the bound and was
-  discarded anyway. But "the guard has always caught it" is not a reason to
-  leave a 2× error one clean background away, so waist now takes the landmark
-  path by construction. Its span is always drawn green in the overlay.
+  This is why the constants had to grow so large and so specific. ×2.014 for
+  the waist is not a measurement convention, it is one person's hip-joint span
+  measured against his waist.
 
-  A consequence worth knowing: the drawn waist line is display-only. It sits
-  where a waist tape goes so the overlay matches what the number claims, but
-  moving it changes nothing about the measurement.
+  The fix is the pose model's own segmentation mask, which is what the scan
+  was approximating badly and costs no extra model or download.
+  `src/lib/silhouette.ts` reads torso widths from it, taking the run of body
+  pixels containing the torso centre so arms held away from the body aren't
+  measured as ribs, and `findWaist` locates the natural waist as the narrowest
+  point of the torso rather than at a fixed fraction of the shoulder-to-hip
+  span.
 
-- **On a cluttered background the contour is rejected everywhere**, and chest
-  and hip fall back to landmark estimates too. That's the safety rule
-  working, but it means the numbers are less independent than they look: in
-  a normal room, chest derives from the shoulder span and hip from the hip
-  span. A plain wall behind you gives the contour scan a chance to
-  contribute.
+  **It changes nothing that is reported, deliberately.** The constants are
+  fitted against landmark spans, so feeding one a reading of the real body
+  double-counts — the same error that would have put the waist at 57in. So the
+  mask figures appear under "Calibration data" on the results screen, drawn on
+  the photo as amber dashed lines, and the next photo with a tape reading
+  beside it is what lets a constant be refitted against the body. Waist is the
+  one waiting on it.
+
+- **Waist is landmark-only.** The contour scan doesn't feed it, for the same
+  double-counting reason, and the drawn waist line is display-only.
+
+- **The landmarks used for the measurement come from tracking mode.** The
+  preview loop runs MediaPipe in `VIDEO` mode, which carries state between
+  frames and smooths across them — the browser twin of the
+  `static_image_mode` bug fixed in the Python service. The IMAGE-mode pass
+  that produces the mask is the fix, but switching the measurement onto it
+  moves the numbers slightly, so it waits for the same refit.
 - Accuracy depends on the card being flat to the camera and **touching the
   body**. This is the largest real-world error source, confirmed by the first
   field test: a card held out in the hands sits closer to the camera than the

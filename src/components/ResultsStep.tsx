@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   checkAgainstPose,
   checkConsistency,
   checkPlausibility,
   verdictFor,
 } from "@/lib/plausibility";
-import type { MeasuredSpan } from "@/lib/measure";
+import type { CalibrationReadout, MeasuredSpan } from "@/lib/measure";
 import type { CapturedPhoto, Measurements } from "@/lib/types";
 import { EASE_CM } from "@/lib/constants";
 
@@ -63,10 +63,46 @@ const GROUPS: Group[] = [
   },
 ];
 
+
+/**
+ * The readout, in the order a refit needs it: the spans the constants are
+ * currently hung on, then what the body measures at each point.
+ */
+const CALIBRATION_ROWS: Array<{
+  label: string;
+  value: (c: CalibrationReadout) => string | null;
+}> = [
+  {
+    label: "Shoulder joint span",
+    value: (c) => `${c.shoulderJointSpanCm.toFixed(2)} cm`,
+  },
+  { label: "Hip joint span", value: (c) => `${c.hipJointSpanCm.toFixed(2)} cm` },
+  {
+    label: "Chest, at the body",
+    value: (c) => (c.chestBodyCm === null ? null : `${c.chestBodyCm.toFixed(2)} cm`),
+  },
+  {
+    label: "Waist, at the body",
+    value: (c) => (c.waistBodyCm === null ? null : `${c.waistBodyCm.toFixed(2)} cm`),
+  },
+  {
+    label: "Hip, at the body",
+    value: (c) => (c.hipBodyCm === null ? null : `${c.hipBodyCm.toFixed(2)} cm`),
+  },
+  {
+    label: "Narrowest point, shoulders → hips",
+    value: (c) =>
+      c.waistAtFraction === null
+        ? null
+        : `${(c.waistAtFraction * 100).toFixed(1)}%  (measured at 35%)`,
+  },
+];
+
 export default function ResultsStep({
   photo,
   measurements,
   spans,
+  calibration,
   cardAdjusted,
   onStartOver,
   onAdjustCard,
@@ -74,6 +110,7 @@ export default function ResultsStep({
   photo: CapturedPhoto;
   measurements: Measurements;
   spans: MeasuredSpan[];
+  calibration: CalibrationReadout | null;
   cardAdjusted: boolean;
   onStartOver: () => void;
   onAdjustCard: () => void;
@@ -81,6 +118,7 @@ export default function ResultsStep({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [unit, setUnit] = useState<Unit>("cm");
   const [copied, setCopied] = useState(false);
+  const [copiedCalibration, setCopiedCalibration] = useState(false);
 
   const report = useMemo(() => checkPlausibility(measurements), [measurements]);
   const scaleReport = useMemo(
@@ -109,14 +147,25 @@ export default function ResultsStep({
         const y = span.y * canvas.height;
         const x1 = span.x1 * canvas.width;
         const x2 = span.x2 * canvas.width;
-        const color = span.source === "contour" ? "#38bdf8" : "#4ade80";
+        // Green = pose landmarks, blue = the old contour scan, amber dashed =
+        // the segmentation mask. The mask lines are what the body actually
+        // measures; they are drawn differently because they are not what the
+        // numbers above them were derived from.
+        const fromMask = span.source === "silhouette";
+        const color = fromMask
+          ? "#fbbf24"
+          : span.source === "contour"
+            ? "#38bdf8"
+            : "#4ade80";
 
         ctx.strokeStyle = color;
         ctx.lineWidth = 3;
+        ctx.setLineDash(fromMask ? [7, 5] : []);
         ctx.beginPath();
         ctx.moveTo(x1, y);
         ctx.lineTo(x2, y);
         ctx.stroke();
+        ctx.setLineDash([]);
 
         // End caps, so the exact extent is unambiguous.
         ctx.lineWidth = 2;
@@ -165,6 +214,26 @@ export default function ResultsStep({
       await navigator.clipboard.writeText(lines.join("\n"));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard can be blocked; the numbers are on screen regardless.
+    }
+  }
+
+  async function copyCalibration() {
+    if (!calibration) return;
+    const lines = [
+      "EFitMi calibration data",
+      ...CALIBRATION_ROWS.map(
+        ({ label, value }) => `${label}: ${value(calibration) ?? "not found"}`,
+      ),
+      "",
+      "Body figures come from the segmentation mask and feed nothing that was",
+      "reported; joint spans are what the correction constants are fitted to.",
+    ];
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopiedCalibration(true);
+      setTimeout(() => setCopiedCalibration(false), 2000);
     } catch {
       // Clipboard can be blocked; the numbers are on screen regardless.
     }
@@ -392,6 +461,41 @@ export default function ResultsStep({
           Start over
         </button>
       </div>
+
+      {calibration && (
+        <details className="w-full rounded-xl border border-neutral-200 dark:border-neutral-800 p-3">
+          <summary className="text-sm font-semibold cursor-pointer">
+            Calibration data
+          </summary>
+          <p className="text-xs text-neutral-500 mt-2">
+            What the segmentation mask says your body actually measures, next
+            to the pose landmark spans the reported numbers are derived from.
+            None of this feeds the measurements above — it is here so a tape
+            reading can be matched against the body rather than against a
+            landmark span. Amber dashed lines on the photo show where each was
+            taken.
+          </p>
+          <dl className="mt-3 text-sm grid grid-cols-[1fr_auto] gap-x-4 gap-y-1">
+            {CALIBRATION_ROWS.map(({ label, value }) => {
+              const v = value(calibration);
+              return (
+                <Fragment key={label}>
+                  <dt className="text-neutral-500">{label}</dt>
+                  <dd className="tabular-nums">
+                    {v === null ? "—" : v}
+                  </dd>
+                </Fragment>
+              );
+            })}
+          </dl>
+          <button
+            onClick={copyCalibration}
+            className="mt-3 text-sm font-medium underline"
+          >
+            {copiedCalibration ? "Copied" : "Copy calibration data"}
+          </button>
+        </details>
+      )}
     </div>
   );
 }

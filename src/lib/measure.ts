@@ -14,6 +14,7 @@
 // If it is revived, keep the two implementations' geometry in sync.
 
 import { CARD_WIDTH_MM, CORRECTION, LANDMARK } from "./constants";
+import { bodyWidthAt, findWaist, type Silhouette } from "./silhouette";
 import type { Measurements } from "./types";
 
 const ROW_SAMPLE_COUNT = 9; // odd, so the median is an actual sampled row
@@ -185,12 +186,43 @@ export interface MeasuredSpan {
   /** Normalized x of each end of the measured width. */
   x1: number;
   x2: number;
-  source: "contour" | "landmarks";
+  source: "contour" | "landmarks" | "silhouette";
+}
+
+/**
+ * What the body actually measures, next to what the app reported.
+ *
+ * Every correction constant in this app is a ratio between a pose landmark
+ * span and a tape measurement, fitted to one subject — because until the
+ * segmentation mask there was no reading of the body itself to fit against.
+ * That is why the waist constant is 2.014: it carries one person's
+ * hip-joint-to-waist proportions, not a measurement convention.
+ *
+ * These figures are the missing half. They change nothing that is reported;
+ * they are what a photo has to yield before a constant can be refitted
+ * against the body rather than against a landmark span.
+ */
+export interface CalibrationReadout {
+  /** Landmark spans in cm, card-scaled, before any correction. */
+  shoulderJointSpanCm: number;
+  hipJointSpanCm: number;
+  /** Torso width the mask measures at each point, in cm. */
+  chestBodyCm: number | null;
+  waistBodyCm: number | null;
+  hipBodyCm: number | null;
+  /**
+   * Where the narrowest point of the torso turned out to be, as a fraction
+   * from the shoulder joints to the hip joints. The shipped waist assumes
+   * 0.35 and lands on the lower ribs; this says where it should have looked.
+   */
+  waistAtFraction: number | null;
 }
 
 export interface MeasurementResult {
   measurements: Measurements;
   spans: MeasuredSpan[];
+  /** Null when the segmentation mask was unavailable. */
+  calibration: CalibrationReadout | null;
 }
 
 export function computeMeasurements(
@@ -201,10 +233,19 @@ export function computeMeasurements(
   return measure(landmarks, image, cardBoxWidthPx).measurements;
 }
 
+/**
+ * Bounds of the natural-waist search, as fractions from the shoulder joints
+ * to the hip joints. The narrowest point of the whole span would often be the
+ * neck or the gap between the legs; the waist is well inside it.
+ */
+const WAIST_SEARCH_TOP = 0.35;
+const WAIST_SEARCH_BOTTOM = 0.8;
+
 export function measure(
   landmarks: Landmark[],
   image: ImageData,
   cardBoxWidthPx: number,
+  silhouette?: Silhouette | null,
 ): MeasurementResult {
   const { width, height } = image;
   const scale = cmPerPixel(cardBoxWidthPx);
@@ -310,7 +351,55 @@ export function measure(
   const hipWidthPx = refineWidth(hipLandmarkPx, hipDetected);
   record("Hip", hipY, hipCenterX, hipWidthPx, hipDetected, hipWidthPx);
 
+  // Everything below is diagnostic. It is deliberately kept out of the
+  // returned measurements: the constants above were fitted against landmark
+  // spans, so feeding them a reading of the real body would double-count,
+  // exactly as it would have for the waist. Refitting needs data first, and
+  // this is how the data gets collected.
+  let calibration: CalibrationReadout | null = null;
+  if (silhouette && silhouette.width > 0) {
+    // Mask widths are in mask pixels; the scale is cm per *image* pixel.
+    const maskToImage = width / silhouette.width;
+    const bodyCm = (widthPx: number) =>
+      Math.round(widthPx * maskToImage * scale * 100) / 100;
+
+    const shoulderY = (leftShoulder.y + rightShoulder.y) / 2;
+    const hipY0 = (leftHip.y + rightHip.y) / 2;
+    const at = (fraction: number) => shoulderY + (hipY0 - shoulderY) * fraction;
+
+    const chestBody = bodyWidthAt(silhouette, chestY, chestCenterX);
+    const hipBody = bodyWidthAt(silhouette, hipY, hipCenterX);
+    const waistBody = findWaist(
+      silhouette,
+      at(WAIST_SEARCH_TOP),
+      at(WAIST_SEARCH_BOTTOM),
+      hipCenterX,
+    );
+
+    const show = (label: string, y: number, w: { x1: number; x2: number }) =>
+      spans.push({ label, y, x1: w.x1, x2: w.x2, source: "silhouette" });
+    if (chestBody) show("Chest (body)", chestY, chestBody);
+    if (waistBody) show("Waist (body)", waistBody.y, waistBody);
+    if (hipBody) show("Hip (body)", hipY, hipBody);
+
+    const span = hipY0 - shoulderY;
+    calibration = {
+      shoulderJointSpanCm: toCm(
+        Math.abs(leftShoulder.x - rightShoulder.x) * width,
+      ),
+      hipJointSpanCm: toCm(Math.abs(leftHip.x - rightHip.x) * width),
+      chestBodyCm: chestBody ? bodyCm(chestBody.widthPx) : null,
+      waistBodyCm: waistBody ? bodyCm(waistBody.widthPx) : null,
+      hipBodyCm: hipBody ? bodyCm(hipBody.widthPx) : null,
+      waistAtFraction:
+        waistBody && span !== 0
+          ? Math.round(((waistBody.y - shoulderY) / span) * 1000) / 1000
+          : null,
+    };
+  }
+
   return {
+    calibration,
     measurements: {
       shoulder_width: toCm(shoulderWidthPx),
       chest_width: toCm(chestWidthPx),
