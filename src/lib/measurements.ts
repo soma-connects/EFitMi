@@ -1,5 +1,6 @@
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
 import { CENTER_TOLERANCE, LANDMARK, MIN_BRIGHTNESS, VISIBILITY_THRESHOLD } from "./constants";
+import { MAX_ROTATION_DEG, torsoRotation } from "./plausibility";
 
 export interface FramingResult {
   ok: boolean;
@@ -10,6 +11,7 @@ export interface FramingResult {
 export function checkFraming(
   landmarks: NormalizedLandmark[] | null,
   brightness: number,
+  worldLandmarks?: NormalizedLandmark[] | null,
 ): FramingResult {
   if (!landmarks) {
     return { ok: false, reasons: ["No person detected — step into frame"] };
@@ -37,6 +39,17 @@ export function checkFraming(
 
   if (brightness < MIN_BRIGHTNESS) {
     reasons.push("Too dark — move somewhere brighter");
+  }
+
+  // Squareness has to be gated here rather than warned about afterwards.
+  // A turned torso foreshortens every width by cos of the angle, and no check
+  // downstream can see it: the card is measured correctly and the pose
+  // cross-check agrees, because both estimates shorten together. By the
+  // results screen the only remedy left is retaking the photo, so refuse it
+  // while the person is still standing in front of the camera.
+  const rotation = torsoRotation(worldLandmarks ?? undefined);
+  if (rotation && rotation.worstDeg > MAX_ROTATION_DEG) {
+    reasons.push("Turn to face the camera squarely");
   }
 
   return { ok: reasons.length === 0, reasons };

@@ -159,7 +159,7 @@ export default function CaptureStep({
             );
           }
 
-          const framing = checkFraming(landmarks, brightness);
+          const framing = checkFraming(landmarks, brightness, latestWorldRef.current);
           okRef.current = framing.ok;
 
           const now = performance.now();

@@ -6,6 +6,8 @@ import {
   checkConsistency,
   checkPlausibility,
   checkScale,
+  checkSquareness,
+  torsoRotation,
   verdictFor,
   worldShoulderCm,
 } from "./plausibility";
@@ -298,4 +300,74 @@ test("no ease is invented where the sheet records none", () => {
   // figure alone rather than a garment figure it cannot justify.
   assert.equal(EASE_CM.hip, undefined);
   assert.equal(EASE_CM.hip_width, undefined);
+});
+
+
+/** World landmarks for a torso turned `deg` from square. */
+function turned(deg: number) {
+  const lm = Array.from({ length: 33 }, () => ({ x: 0, y: 0, z: 0 }));
+  const rad = (deg * Math.PI) / 180;
+  for (const [left, right, half] of [
+    [11, 12, 0.16],
+    [23, 24, 0.1],
+  ] as const) {
+    lm[left] = { x: half * Math.cos(rad), y: 0, z: half * Math.sin(rad) };
+    lm[right] = { x: -half * Math.cos(rad), y: 0, z: -half * Math.sin(rad) };
+  }
+  return lm;
+}
+
+test("a square stance reads as square", () => {
+  const r = torsoRotation(turned(0));
+  assert.ok(r);
+  assert.ok(r.worstDeg < 1e-6);
+  assert.equal(checkSquareness(turned(0)).ok, true);
+});
+
+test("rotation is measured from the depth between the shoulders", () => {
+  for (const deg of [10, 25, 40]) {
+    const r = torsoRotation(turned(deg));
+    assert.ok(r && Math.abs(r.worstDeg - deg) < 1e-6, `${deg}° read back wrong`);
+  }
+});
+
+test("the field failure a card check cannot see is caught here", () => {
+  // Second photo of the same subject: card placed accurately, pose cross-check
+  // in agreement, and every measurement 9-12% under the tailor's sheet. A
+  // turned torso foreshortens the card-derived width and the pose estimate
+  // alike, so comparing them cancels the error — only the depth between the
+  // shoulders shows it.
+  const report = checkSquareness(turned(25));
+  assert.equal(report.ok, false);
+  assert.ok(
+    Math.abs(report.shortfall - (1 - Math.cos((25 * Math.PI) / 180))) < 1e-9,
+  );
+  assert.match(report.message ?? "", /9% short/);
+  assert.match(report.message ?? "", /shortens both/);
+});
+
+test("a small lean is tolerated rather than nagged about", () => {
+  // Nobody stands perfectly square, and a threshold that fires on 5° would
+  // train people to ignore it.
+  for (const deg of [0, 5, 10, 15]) {
+    assert.equal(checkSquareness(turned(deg)).ok, true, `${deg}° should pass`);
+  }
+  assert.equal(checkSquareness(turned(16)).ok, false);
+});
+
+test("a twisted torso is caught by whichever half is worse", () => {
+  const lm = turned(0);
+  lm[23] = { x: 0.1 * Math.cos(0.6), y: 0, z: 0.1 * Math.sin(0.6) };
+  lm[24] = { x: -0.1 * Math.cos(0.6), y: 0, z: -0.1 * Math.sin(0.6) };
+  const r = torsoRotation(lm);
+  assert.ok(r);
+  assert.ok(r.shoulderDeg < 1e-6, "shoulders are square");
+  assert.ok(Math.abs(r.hipDeg - (0.6 * 180) / Math.PI) < 1e-6);
+  assert.equal(checkSquareness(lm).ok, false);
+});
+
+test("no world landmarks means no claim either way", () => {
+  assert.equal(torsoRotation(undefined), null);
+  assert.equal(checkSquareness(undefined).ok, true);
+  assert.equal(checkSquareness(undefined).degrees, null);
 });

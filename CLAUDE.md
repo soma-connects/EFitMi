@@ -79,6 +79,22 @@ real body double-counts — the same error that would have put the waist at
 numbers. Do not wire the mask into a reported measurement until the constant
 it feeds has been refitted against it.
 
+## Squareness
+
+`torsoRotation()` in `plausibility.ts` measures how far the torso is turned
+from square, using the depth between the shoulder and hip world landmarks.
+`checkFraming` refuses the shot past 15°.
+
+This is the only check in the app that looks at depth, and it exists because
+every other guard is blind to rotation by construction: foreshortening
+shortens the card-derived width and the pose cross-check estimate by the same
+cos θ, so comparing them cancels it out exactly. The second field test came in
+9-12% under the tailor's sheet with the card placed correctly and the
+cross-check agreeing to the centimetre.
+
+**Any new guard that compares two width estimates has the same blind spot.**
+Catching a common-cause error needs a quantity that is not a width.
+
 ## Things that bit us
 
 - **MediaPipe `Holistic()` defaults to `static_image_mode=False`**, which is

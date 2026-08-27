@@ -58,6 +58,14 @@ number that's wrong. Three guards:
 - **Impossible readings are flagged** per value, with the likely cause
   named: everything too large means the box was drawn smaller than the card,
   everything too small means it was drawn larger.
+- **A turned torso is refused at capture.** Every width here is a horizontal
+  distance in the image, so a torso rotated θ from square reads cos θ of its
+  true width — 3% at 15°, 9% at 25°. Nothing downstream can catch it: the card
+  is measured correctly and the pose cross-check still agrees, because a
+  rotation shortens both of those estimates together. The world landmarks make
+  it directly measurable (square to the camera, both shoulders sit at the same
+  depth), so the shutter stays locked until you are square. This was found the
+  hard way — see below.
 - **A card under 40px wide warns** that placement error will dominate.
 - **Body and garment figures are both shown.** A tailor's sheet writes
   "tight / with ease" — 18/19 shoulder, 37/40 chest, 38/39 waist — because
@@ -231,6 +239,30 @@ What is **not** verified:
   The world landmarks are never used *as* a measurement — they come from the
   model's body prior rather than from this person, which is the assumed-scale
   mistake the card exists to avoid. Second opinion only.
+
+### The second field test, and what it cost
+
+Three of four measurements reproduced the tailor's sheet on the photo they
+were fitted to. On the *next* photo of the same person, everything came in
+9-12% under it: shoulder 16.3in against 18, chest 33.5in against 37, waist
+33.5in against 38.
+
+The card was placed accurately and the pose cross-check agreed with it to the
+centimetre. What moved was the pose itself — the shoulder joint span read
+29.71cm where the calibration run gave 32.73cm, and the hip span 17.3cm where
+it gave 19.64cm. A rotation of about 25° accounts for both.
+
+Two things follow, and they are the current state of this project:
+
+1. **A turned torso was invisible to every guard.** Foreshortening shortens
+   the card-derived width and the pose estimate by the same cos θ, so
+   comparing them cancels it exactly. The squareness gate above is the fix,
+   and it is the only check here that looks at depth rather than width.
+2. **The constants do not survive a second photo.** They are ratios between a
+   landmark span and a tape reading, fitted to one shot, and a landmark span
+   moves with pose. Some of that 9-12% is rotation; how much is not yet known.
+   Until a constant is fitted against a *body* measurement — which is what the
+   segmentation mask now provides — this will keep happening.
 
 The phase 1 acceptance test is physical: hold a tape measure to your own
 shoulders and compare. If a number is absurd (15cm, 300cm), that's a

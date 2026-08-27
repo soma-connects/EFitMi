@@ -248,3 +248,90 @@ export function checkConsistency(m: Measurements): ConsistencyReport {
 
   return { ok: true, message: null };
 }
+
+
+/**
+ * How far the torso is turned away from square, in degrees.
+ *
+ * Every width in this app is a horizontal distance in the image, so a torso
+ * rotated by θ about the vertical axis reads cos θ of its true width: 3% at
+ * 15°, 9% at 25%. Nothing else in the app can see this. The card is fine, the
+ * landmarks are fine, and the pose cross-check agrees with the card — because
+ * a rotation shortens *both* estimates together, so comparing them cancels
+ * the error out.
+ *
+ * The world landmarks make it directly measurable: square to the camera, the
+ * two shoulders sit at the same depth, so any z between them is rotation.
+ * Shoulders and hips are reported separately because a torso can twist.
+ */
+export interface RotationReport {
+  shoulderDeg: number;
+  hipDeg: number;
+  /** The larger of the two — whichever is worse governs the measurements. */
+  worstDeg: number;
+}
+
+export function torsoRotation(
+  worldLandmarks: Array<{ x: number; y: number; z?: number }> | undefined,
+): RotationReport | null {
+  if (!worldLandmarks || worldLandmarks.length < 25) return null;
+
+  const angle = (a: number, b: number): number | null => {
+    const l = worldLandmarks[a];
+    const r = worldLandmarks[b];
+    if (!l || !r) return null;
+    const dx = Math.abs(l.x - r.x);
+    const dz = Math.abs((l.z ?? 0) - (r.z ?? 0));
+    if (dx === 0 && dz === 0) return null;
+    return (Math.atan2(dz, dx) * 180) / Math.PI;
+  };
+
+  const shoulderDeg = angle(11, 12);
+  const hipDeg = angle(23, 24);
+  if (shoulderDeg === null || hipDeg === null) return null;
+
+  return { shoulderDeg, hipDeg, worstDeg: Math.max(shoulderDeg, hipDeg) };
+}
+
+/**
+ * Beyond this the foreshortening exceeds the accuracy the rest of the app is
+ * trying to hold. cos 15° is 0.966, so a 3.4% shortfall — already the size of
+ * the gap between a validated constant and a wrong one, and it grows fast.
+ */
+export const MAX_ROTATION_DEG = 15;
+
+export interface SquarenessReport {
+  ok: boolean;
+  /** Fraction every width is shortened by, e.g. 0.09 for 9%. */
+  shortfall: number;
+  degrees: number | null;
+  message: string | null;
+}
+
+export function checkSquareness(
+  worldLandmarks: Array<{ x: number; y: number; z?: number }> | undefined,
+): SquarenessReport {
+  const rotation = torsoRotation(worldLandmarks);
+  if (!rotation) {
+    return { ok: true, shortfall: 0, degrees: null, message: null };
+  }
+
+  const shortfall = 1 - Math.cos((rotation.worstDeg * Math.PI) / 180);
+  if (rotation.worstDeg <= MAX_ROTATION_DEG) {
+    return { ok: true, shortfall, degrees: rotation.worstDeg, message: null };
+  }
+
+  return {
+    ok: false,
+    shortfall,
+    degrees: rotation.worstDeg,
+    message:
+      `You were turned about ${rotation.worstDeg.toFixed(0)}° away from the camera, ` +
+      `so every width across your body is foreshortened — roughly ` +
+      `${(shortfall * 100).toFixed(0)}% short, and the circumferences with them. ` +
+      `Nothing else here can catch this: the card is measured correctly and the ` +
+      `pose cross-check still agrees, because a turned torso shortens both of ` +
+      `those estimates together. Stand square to the camera, shoulders and hips ` +
+      `both level to it, and retake.`,
+  };
+}

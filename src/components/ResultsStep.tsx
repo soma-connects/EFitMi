@@ -5,6 +5,7 @@ import {
   checkAgainstPose,
   checkConsistency,
   checkPlausibility,
+  checkSquareness,
   verdictFor,
 } from "@/lib/plausibility";
 import type { CalibrationReadout, MeasuredSpan } from "@/lib/measure";
@@ -126,6 +127,10 @@ export default function ResultsStep({
     [measurements, photo.worldLandmarks],
   );
   const consistency = useMemo(() => checkConsistency(measurements), [measurements]);
+  const squareness = useMemo(
+    () => checkSquareness(photo.worldLandmarks),
+    [photo.worldLandmarks],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -247,14 +252,21 @@ export default function ResultsStep({
         aria-label="Captured photo with the measured spans drawn on it"
       />
 
-      <div className="flex items-center gap-4 text-xs text-neutral-500 self-start">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-neutral-500 self-start">
         <span className="flex items-center gap-1.5">
           <span className="w-4 h-0.5 bg-[#4ade80]" />
-          from pose landmarks
+          measured from pose landmarks
         </span>
         <span className="flex items-center gap-1.5">
           <span className="w-4 h-0.5 bg-[#38bdf8]" />
-          from the outline in the photo
+          measured from the photo&apos;s outline
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span
+            className="w-4 border-t-2 border-dashed border-[#fbbf24]"
+            aria-hidden
+          />
+          your actual outline — not used in the numbers
         </span>
       </div>
 
@@ -273,6 +285,23 @@ export default function ResultsStep({
             className="mt-2 text-sm font-medium underline text-blue-900 dark:text-blue-200"
           >
             Place the box on the card
+          </button>
+        </div>
+      )}
+
+      {!squareness.ok && (
+        <div className="w-full rounded-xl border border-amber-400/60 bg-amber-50 dark:bg-amber-950/40 p-3">
+          <p className="text-sm font-semibold text-amber-700 dark:text-amber-300">
+            You weren&apos;t square to the camera
+          </p>
+          <p className="text-sm text-amber-700/90 dark:text-amber-200/90 mt-1">
+            {squareness.message}
+          </p>
+          <button
+            onClick={onStartOver}
+            className="mt-2 text-sm font-medium underline text-amber-800 dark:text-amber-200"
+          >
+            Retake the photo
           </button>
         </div>
       )}
