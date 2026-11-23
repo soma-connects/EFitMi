@@ -1,304 +1,155 @@
 # EFitMi
 
-Phase 1: turn a guided phone photo into approximate body measurements,
-calibrated to real-world scale using a bank card (ISO/IEC 7810 ID-1,
-85.6mm × 53.98mm) held against the chest as a known-size reference object.
+Chest, waist and hip measurements from two phone photos (one from the front,
+one from the side) and the person's height. Built for Android in Kotlin.
 
-No garment generation, no try-on, no accounts, no persistence — that's a
-later phase. This is just the capture → calibrate → measure pipeline,
-working end to end.
+**Status: the measurement core is built, tested and validated against 2,505
+real people. The Android app around it is not started.** This repo was
+restarted from scratch after the first version (a web app built on a
+borrowed pipeline) could not be made accurate. Its code is still in git
+history, up to commit `04ff2bc`.
 
-**Live:** https://efitmi-pauljis-projects.vercel.app (every push to `main`
-redeploys)
+## How it measures
 
-## Why a bank card
+A girth (chest, waist, hip) is the length of a loop around the body. One
+photo can't give you that: from the front you see how wide you are, not how
+deep. So:
 
-A photo alone can't tell you scale — a tall person far away and a short
-person up close produce the same pixels. Every measurement therefore needs
-something of known size in the same frame. A bank card is the same size
-everywhere in the world, and people already carry one, which a tape measure
-or a sheet of A4 is not.
+1. **Two silhouettes.** Front and side photo, whole body in frame, each turned
+   into a black-and-white mask of the person.
+2. **Scale from your height.** You type your height. The rows between the top
+   of the head and the soles are that height, so each photo gets its own
+   centimetres-per-pixel. Each photo is scaled separately: in BodyM the front
+   and side photos of one capture differ in scale by a median of about 5%
+   (11% at the 90th percentile), so sharing one scale would put that straight
+   into every number.
+3. **Width and depth at 47 levels** from 40% to 86% of your height. Width
+   comes from the front mask and counts only the torso: arms held away from
+   the body are excluded. Depth comes from the side mask.
+4. **An ellipse at each level.** Width and depth give an ellipse; its
+   perimeter is the girth at that level.
+5. **A fitted model reads the perimeters** and returns chest, waist and hip,
+   each with the error that model made on people it was never fitted to.
 
-This makes the measurement *relative* to a real object rather than absolute
-3D reconstruction, which is what makes it tractable at all.
+If a photo can't support a measurement (feet cut off, body too small, height
+outside what was validated), the answer is a refusal that says what to fix. There is no
+default height and no fallback value.
 
-## How it works
+## How accurate it is
 
-1. **Capture** — live camera preview with a body and card guide overlay.
-   MediaPipe Pose (`@mediapipe/tasks-vision`) runs on every frame and only
-   enables the shutter once a person is centred, framed from head to hips,
-   and the shot is bright enough. There's a timer, because you can't hold a
-   card to your chest and reach the button.
-2. **Calibrate** — place a box on the card in the photo. The view opens
-   already zoomed on the card (it's only ~20px wide next to a whole body),
-   with pan, zoom and a magnifier under the dragged corner. The box can lock
-   to the card's real proportions so only the width has to be matched.
-   `cm_per_px = 8.56 / card_box_width_px`.
-3. **Measure** — `src/lib/measure.ts` converts landmark distances to
-   centimetres with that scale and derives circumferences from an elliptical
-   approximation. The photo also goes through a second pose pass that emits a
-   person/background segmentation mask, which is read for the torso's real
-   width; that is reported as calibration data rather than folded into the
-   numbers (see below). Entirely in the browser; the photo never leaves the
-   device.
-4. **Results** — the photo with landmarks drawn on it, the measurements in
-   cm or inches, and a warning if anything looks impossible.
+Measured against 3D-scan girths from [BodyM](https://registry.opendata.aws/bodym/)
+(Amazon: front and side silhouettes of real people plus scan measurements).
+The model is fitted on the `train` split (1,600 people) and scored on people
+it never saw. Full table: [`docs/validation.md`](docs/validation.md).
 
-## Guards against confidently-wrong numbers
+| | **test A** (lab photos) | **test B** (real, less-controlled photos) |
+|---|---|---|
+| | mean error · 90th percentile | mean error · 90th percentile |
+| chest | 2.95 cm · 6.6 cm | **4.03 cm** · 8.7 cm |
+| waist | 3.65 cm · 7.6 cm | **4.92 cm** · 11.0 cm |
+| hip | 2.41 cm · 4.7 cm | **3.96 cm** · 8.2 cm |
 
-The failure mode that matters isn't crashing, it's a plausible-looking
-number that's wrong. Three guards:
+Test B is the honest column. The dataset describes it as photographed in a
+less-controlled environment, with varied camera orientations and lighting,
+which is closest to what a phone will produce. **Typically 4-5 cm off, and 8-11
+cm off one time in ten, is not tailor-grade.** It is the real accuracy of this
+approach so far.
+The app should show each result with these error figures attached; the model
+file carries them for that reason.
 
-- **Uncalibrated results are labelled.** The card box is seeded from the
-  detected shoulder span — a decent starting size, but derived from an
-  *average build*, not from your card. Confirming without ever moving it
-  would reproduce exactly the guessed-scale flaw this project replaced, so
-  that state is tracked and surfaced on both the calibrate and results
-  screens. Panning and zooming don't count as adjusting.
-- **Impossible readings are flagged** per value, with the likely cause
-  named: everything too large means the box was drawn smaller than the card,
-  everything too small means it was drawn larger.
-- **A turned torso is refused at capture.** Every width here is a horizontal
-  distance in the image, so a torso rotated θ from square reads cos θ of its
-  true width — 3% at 15°, 9% at 25°. Nothing downstream can catch it: the card
-  is measured correctly and the pose cross-check still agrees, because a
-  rotation shortens both of those estimates together. The world landmarks make
-  it directly measurable (square to the camera, both shoulders sit at the same
-  depth), so the shutter stays locked until you are square. This was found the
-  hard way — see below.
-- **A card under 40px wide warns** that placement error will dominate.
-- **Body and garment figures are both shown.** A tailor's sheet writes
-  "tight / with ease" — 18/19 shoulder, 37/40 chest, 38/39 waist — because
-  the allowance differs per measurement. Where that convention is on record
-  the app shows both; where it isn't (hip), it shows the body figure alone
-  rather than inventing an allowance.
-- **The measurements are checked against each other**, not just against
-  ranges. A waist far larger than the hip below it isn't a physique, it's a
-  bug — and per-value bounds can't see it, because each number looks
-  possible alone. This is what catches the current hip figure.
-- **Results are grouped by how far they can be trusted**, not by what they
-  measure. Shoulder, chest and waist reproduce a real tape measurement; hip
-  still uses an inherited constant and is shown muted, under a heading saying
-  so. The copied text carries the same split, since that is what actually
-  reaches a tailor.
+### What these numbers do not cover
 
-## Running it locally
+- **Only photos with the whole body in frame were scored.** 26% of train, 37%
+  of test A and 46% of test B photos were refused, nearly all because the side
+  photo cuts off the feet. The app's capture screen has to prevent that; the
+  error figures say nothing about photos that would have been refused.
+- **Clean silhouettes, no clothes.** BodyM masks come from near-nude scans.
+  Loose clothing adds girth, and a phone's own segmentation is noisier than
+  these masks. Neither is measured yet.
+- **Waist reads about 2.5 cm high** on both test sets. Part of that may be a
+  population difference (test A's men are thinner than the training men: waist
+  86 cm against 93 cm), but test B's men are similar to the training men and
+  the bias is still there. The cause is not known.
+- **Heights 141-197 cm only.** That is the range of the fit data; outside it the
+  model refuses.
+- **The model is fitted on BodyM, which is licensed CC BY-NC 4.0.** Fine for
+  development and research. Before any commercial release it has to be
+  re-derived from data collected with consent.
 
-One process — the app is fully client-side, with no backend to run.
+### What was tried, and what it was worth
 
-```bash
-npm install     # also fetches the MediaPipe runtime into public/mediapipe/
-npm run dev     # http://localhost:3000
-npm test        # measurement, plausibility and viewport suites
+Mean error in cm (chest / waist / hip), always on people the fit never saw.
+The rows marked *prototype* come from a quick Python script, not the shipped
+Kotlin code (which reproduces the prototype's shipped-model row to within
+0.02 cm).
+
+**Scored on all of test B** (618 photos, 336 people):
+
+| approach | chest / waist / hip |
+|---|---|
+| ellipse at one fixed height, one-line fit (*prototype*) | 5.7 / 6.1 / 4.7 |
+| **ellipse perimeter at 47 levels, ridge fit (shipped)** | **4.0 / 4.9 / 4.0** |
+| plus typed weight (*prototype*) | 3.5 / 4.1 / 3.0 |
+| plus typed weight, BMI and sex (*prototype*) | 3.0 / 3.9 / 2.5 |
+
+**Scored on half of test B** (300 photos, 160 people), because the last two
+variants fit on the other half:
+
+| approach | chest / waist / hip |
+|---|---|
+| shipped model | 4.2 / 4.9 / 4.1 |
+| same, but scaled from the scan's exact height instead of the typed one | 3.9 / 4.8 / 3.7 |
+| same as shipped, also fitted on the other half of test B | 4.1 / 4.7 / 4.0 |
+
+Reading it: the multi-level profile is the big step (5.7 to 4.0 on chest).
+Exact height and extra real-photo training data each recover about 0.3 cm at
+most, so neither the typed height nor a domain gap is the bottleneck. Weight is the
+one input that moves the number, and is an open decision (below).
+
+## Layout
+
+```
+core/         Pure Kotlin. Mask -> silhouette -> level profile -> girths.
+              No Android classes, so this exact code ships in the app.
+validation/   JVM tool: runs core on BodyM, fits the model, writes the report.
+tools/        fetch-bodym.sh downloads the dataset into data/ (gitignored).
+docs/         validation.md, generated by `report`.
 ```
 
-`public/mediapipe/` is gitignored and regenerated by `npm run
-setup:mediapipe`; the runtime and pose model are served from the app's own
-origin rather than a CDN, so pose detection doesn't depend on a third party
-being reachable.
+## Running it
 
-### The Python service (`service/`) — currently unused
-
-The pipeline originally ran as a Flask service, and that code is still here.
-It is **not** part of the running app: `measure.ts` is a direct port,
-verified against it at 0.000cm difference across all seven outputs given the
-same landmarks and photo.
-
-It's kept because it holds the one capability the browser port doesn't —
-MiDaS depth estimation, which would refine the circumference estimates. In
-practice that was already dormant (every response returned
-`depth_refinement: false`, since the weights need a `torch.hub` download),
-which is what made the port lossless. If you revive it, keep the geometry in
-the two implementations in sync.
+Needs JDK 17+ (built with 21). First time:
 
 ```bash
-cd service
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python app.py                # http://localhost:8001
-python test_calibration.py   # calibration checks, no heavy deps needed
+tools/fetch-bodym.sh          # ~140 MB, safe to re-run after a dropped connection
 ```
 
-## Accuracy status — read before trusting a number
+```bash
+./gradlew :core:test                                        # unit tests, no data needed
+./gradlew :validation:run --args="report --write"           # score the shipped model, rewrite docs/validation.md
+./gradlew :validation:run --args="train"                    # refit and score; does NOT replace the model
+./gradlew :validation:run --args="train --write"            # refit and replace core/.../girth-model.txt
+```
 
-Verified by `npm test` (Node's built-in runner, no framework to install):
-the scale arithmetic round-trips, **every** measurement scales exactly
-linearly with the card's pixel width, results are independent of image
-resolution, the same input always gives the same output, a wild contour
-reading can't inflate a result, and the calibrate view's zoom/pan round trip
-is lossless — so zooming can never change what gets measured.
+## Open decisions
 
-Each of those was checked against a deliberately reintroduced bug, to
-confirm it actually fails when the behaviour regresses. One test didn't, and
-was replaced.
-
-What is **not** verified:
-
-- **Shoulder, chest and waist are calibrated against a tailor's sheet; hip
-  is not.** The sheet records this subject's body shoulder as 18in, tight
-  chest as 37in and waist as 38in, against a MediaPipe joint-centre shoulder
-  span of 32.73cm and hip span of 19.64cm — a path that never touches the
-  card, so it carries no calibration error. That pins shoulder at ×1.397,
-  chest at ×1.059 and waist at ×2.014, and all three reproduce the sheet
-  exactly.
-
-  Shoulder and chest supersede earlier figures of 17in and 36in (which had
-  given ×1.35 and ×1.03). The sheet is the better source: a full measuring
-  session with the tight/ease convention written down. The inherited ×1.1
-  shoulder was far too small either way, because MediaPipe's landmarks sit at
-  the ball-and-socket joint centres, well inboard of the bony point.
-
-  The waist figure was briefly taken for a trouser measurement over clothing
-  and discounted an inch to 37in; the subject confirmed 38in is his actual
-  body waist, so the deduction is gone and the target is a direct tape
-  reading like the other two.
-
-  Note the limit of one circumference measurement: it constrains the
-  product, not the width correction and the 0.7 depth ratio separately. The
-  depth ratio is at least anatomically motivated, so the unvalidated
-  inherited constant is the one that moved.
-
-  **Waist is the weakest of the three, even so.** BlazePose has no waist
-  landmark, so waist width derives from the *hip* joint span and ×2.014
-  carries the entire span-to-circumference ratio. That constant encodes this
-  subject's torso proportions, not just a measurement convention, so it will
-  drift further on a different build than shoulder and chest will.
-
-  **Hip ×1.35 is still the inherited constant and is visibly wrong.**
-  It shares the same hip landmarks as waist but carries only 1.35, so it
-  reads ~28in against a 38in waist — backwards for a human body. The
-  consistency check surfaces this rather than letting it ship quietly. It
-  needs a real hip circumference measurement; nothing can derive one, since
-  the two share a baseline and differ only in their constants.
-
-  Note what this means for the cross-check: it applies the shoulder
-  correction to *both* sides, so it detects scale errors but is structurally
-  blind to a wrong multiplier. Only a tape measurement can catch that.
-- **Circumferences are the roughest figures here.** They come from width via
-  an elliptical model assuming depth ≈ 0.7 × width, not from any measurement
-  of depth.
-- **No reported number is a measurement of the body.** Every one is a pose
-  landmark span multiplied by a constant fitted to one subject. That was not
-  the intent — the pipeline inherited a "contour-assisted" width scan meant to
-  read the real silhouette — but that scan walks outward from the body centre
-  until it finds a pixel darker than luma 50, so it only finds an edge on a
-  bright body against a near-black background. Across five lighting
-  arrangements it contributed to exactly one: the synthetic fixture in the
-  test suite. On a dark shirt it stops at the first pixel; on a light wall it
-  never stops.
-
-  This is why the constants had to grow so large and so specific. ×2.014 for
-  the waist is not a measurement convention, it is one person's hip-joint span
-  measured against his waist.
-
-  The fix is the pose model's own segmentation mask, which is what the scan
-  was approximating badly and costs no extra model or download.
-  `src/lib/silhouette.ts` reads torso widths from it, taking the run of body
-  pixels containing the torso centre so arms held away from the body aren't
-  measured as ribs, and `findWaist` locates the natural waist as the narrowest
-  point of the torso rather than at a fixed fraction of the shoulder-to-hip
-  span.
-
-  **It changes nothing that is reported, deliberately.** The constants are
-  fitted against landmark spans, so feeding one a reading of the real body
-  double-counts — the same error that would have put the waist at 57in. So the
-  mask figures appear under "Calibration data" on the results screen, drawn on
-  the photo as amber dashed lines, and the next photo with a tape reading
-  beside it is what lets a constant be refitted against the body. Waist is the
-  one waiting on it.
-
-- **Waist is landmark-only.** The contour scan doesn't feed it, for the same
-  double-counting reason, and the drawn waist line is display-only.
-
-- **The landmarks used for the measurement come from tracking mode.** The
-  preview loop runs MediaPipe in `VIDEO` mode, which carries state between
-  frames and smooths across them — the browser twin of the
-  `static_image_mode` bug fixed in the Python service. The IMAGE-mode pass
-  that produces the mask is the fix, but switching the measurement onto it
-  moves the numbers slightly, so it waits for the same refit.
-- Accuracy depends on the card being flat to the camera and **touching the
-  body**. This is the largest real-world error source, confirmed by the first
-  field test: a card held out in the hands sits closer to the camera than the
-  shoulders, so it covers more pixels than its size warrants and every
-  measurement comes out proportionally small. At a 1.5-2.5m camera distance,
-  holding the card 15-35cm forward alone costs 10-30%. A tilted card pushes
-  the error the other way.
-
-  **Distance is the amplifier.** The same 25cm forward offset costs 11% at a
-  2.5m camera distance and 71% at 60cm, so an arm's-length selfie is the
-  worst case. Prop the phone up, stand back, and use the timer.
-
-  The app guards against this with an independent cross-check: MediaPipe's
-  3D world landmarks give a shoulder estimate in metres that owes nothing to
-  the card, so comparing it against the card-derived figure catches a
-  mis-scaled result whatever caused it. Both sides carry the same shoulder
-  correction, since the world landmarks sit at the joint centres rather than
-  the acromion. It is shown live on the calibrate screen while the box can
-  still be fixed, and it seeds the starting box too.
-
-  The world landmarks are never used *as* a measurement — they come from the
-  model's body prior rather than from this person, which is the assumed-scale
-  mistake the card exists to avoid. Second opinion only.
-
-### The second field test, and what it cost
-
-Three of four measurements reproduced the tailor's sheet on the photo they
-were fitted to. On the *next* photo of the same person, everything came in
-9-12% under it: shoulder 16.3in against 18, chest 33.5in against 37, waist
-33.5in against 38.
-
-The card was placed accurately and the pose cross-check agreed with it to the
-centimetre. What moved was the pose itself — the shoulder joint span read
-29.71cm where the calibration run gave 32.73cm, and the hip span 17.3cm where
-it gave 19.64cm. A rotation of about 25° accounts for both.
-
-Two things follow, and they are the current state of this project:
-
-1. **A turned torso was invisible to every guard.** Foreshortening shortens
-   the card-derived width and the pose estimate by the same cos θ, so
-   comparing them cancels it exactly. The squareness gate above is the fix,
-   and it is the only check here that looks at depth rather than width.
-2. **The constants do not survive a second photo.** They are ratios between a
-   landmark span and a tape reading, fitted to one shot, and a landmark span
-   moves with pose. Some of that 9-12% is rotation; how much is not yet known.
-   Until a constant is fitted against a *body* measurement — which is what the
-   segmentation mask now provides — this will keep happening.
-
-The phase 1 acceptance test is physical: hold a tape measure to your own
-shoulders and compare. If a number is absurd (15cm, 300cm), that's a
-calibration bug and takes priority over any polish.
+- **Ask for weight?** Worth roughly 1 cm on real photos (table above), at the cost
+  of one more question and a partial lean on a population prior. Not added.
+- **Silhouette landmarks.** Levels are fractions of height. Locating the
+  armpit and crotch in each silhouette and measuring relative to those may
+  cut error, and is the next experiment the harness is ready for.
+- **Shoulder width** needs its own model; it is not a girth.
+- **The Android app.** Needs the Android SDK, whose download host
+  (`dl.google.com`) is blocked in the current cloud environment. Camera
+  capture, a person-segmentation model for the masks, and a gravity-sensor
+  level check are the pieces.
 
 ## Credit
 
-The measurement pipeline (`src/lib/measure.ts`, ported from
-`service/app.py`) is adapted from
+Data: BodyM, Amazon (CC BY-NC 4.0). The girth-from-cross-section idea follows
+[SMPL-Anthropometry](https://github.com/DavidBoja/SMPL-Anthropometry) and the
+front-plus-side-silhouette setup follows Amazon's BodyM paper, "Human Body
+Measurement Estimation with Adversarial Augmentation". The
+first version of this project adapted
 [JavTahir/Live-Measurements-Api](https://github.com/JavTahir/Live-Measurements-Api)
-(MIT License) — MediaPipe pose extraction, contour-assisted width detection
-and the elliptical circumference estimate are carried over from that
-project. See `service/LICENSE-live-measurements-api` for the original
-license text.
-
-What changed, and why:
-
-- **Calibration was replaced entirely.** The original calibrates from a
-  self-reported height (defaulting to a hardcoded 152cm), and its
-  A4-paper detection only runs as a fallback when pose detection fails
-  outright — where it takes the largest edge contour in the frame with no
-  shape or colour filtering, which would often be the person's own
-  silhouette. Both paths are dropped in favour of the user-confirmed card
-  box.
-- **`max(landmark, contour)` was replaced** with a bounded rule: the contour
-  reading is used only when it corroborates the landmarks, so a shadow or a
-  loose garment can't silently inflate a measurement.
-- **The contour scan no longer invents a value.** It returned 10% of the
-  image width when it found no edge, which could be presented as a
-  measurement; it now reports failure and the landmarks are used.
-- **Pose detection was made deterministic.** The service shared one
-  MediaPipe detector left in video-tracking mode, so it carried state
-  between requests and returned different landmarks for the same photo.
-
-## Non-goals for this phase
-
-Fabric capture/generation, virtual try-on, accounts, persistence, a native
-app, automatic (non-manual) card detection, and any measurement beyond
-shoulder/chest/waist/hip. See the phase 1 spec for the full rationale.
+(MIT); none of that code remains.
