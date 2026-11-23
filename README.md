@@ -131,6 +131,20 @@ tools/fetch-bodym.sh          # ~140 MB, safe to re-run after a dropped connecti
 ./gradlew :validation:run --args="train --write"            # refit and replace core/.../girth-model.txt
 ```
 
+The dataset is only needed to re-run the validation. The tests and the app do
+not use it, and the committed `docs/validation.md` already holds the results.
+
+### On Windows
+
+- **Install a JDK first.** Gradle is a Java program and will say
+  `JAVA_HOME is not set` without one. `winget install EclipseAdoptium.Temurin.21.JDK`
+  works, or use the installer from adoptium.net and tick "Set JAVA_HOME" and
+  "Add to PATH". Then open a *new* terminal; an open one doesn't see the change.
+- **In PowerShell, run Gradle as `.\gradlew`** (`.\gradlew :core:test`).
+- **`tools/fetch-bodym.sh` is a bash script.** PowerShell can't run it and will
+  silently do nothing. Run it from Git Bash (installed with Git for Windows):
+  `bash tools/fetch-bodym.sh`.
+
 ## Open decisions
 
 - **Ask for weight?** Worth roughly 1 cm on real photos (table above), at the cost
